@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+:root {
+  /* ClimaTech brand colors */
+  --ct-navy: #0f2744;
+  --ct-navy-light: #1a3a5c;
+  --ct-blue: #1e5fa8;
+  --ct-blue-light: #2d7dd2;
+  --ct-teal: #0ea5a0;
+  --ct-green: #10c98f;
+  --ct-green-light: #34d9a5;
+
+  --background: #ffffff;
+  --foreground: #0f2744;
+
+  --sidebar-width: 240px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --animate-fade-in: fade-in 150ms ease-out;
+  --animate-scale-in: scale-in 150ms ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: #ffffff;
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Sidebar nav active highlight */
+.nav-active {
+  background: linear-gradient(90deg, rgba(14,165,160,0.15), rgba(16,201,143,0.08));
+  border-left: 3px solid var(--ct-green);
+}
+
+
+/* Animação para notificação de modo ao vivo */
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
