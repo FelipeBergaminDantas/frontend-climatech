@@ -127,9 +127,6 @@ O sistema possui três níveis de acesso com **isolamento total de dados por cli
 - **Isolamento**: Vê apenas dados do cliente selecionado
 - **Visibilidade**: Invisível para Administradores Cliente
 
-**Usuários Administradores Master:**
-- Felipe Bergamin Dantas: `felipedantas016@gmail.com` / `050406Fe.`
-- Rafael Alves: `rafael.alves@climatech.com` / `Rafael@2024`
 
 ### 🔵 Administrador Cliente
 - **Acesso**: Apenas um cliente específico (vinculado permanentemente)
@@ -255,10 +252,6 @@ Todos os dados são in-memory (sem banco de dados). Os dados iniciais estão em 
 - Sala Demo 2 (2 ACs)
 
 ### Usuários
-**Administradores Master:**
-- Felipe Bergamin Dantas: `felipedantas016@gmail.com` / `050406Fe.`
-- Rafael Alves: `rafael.alves@climatech.com` / `Rafael@2024`
-
 **Administradores Cliente:**
 - Adm UNIFecaf: `admin@unifecaf.com` / `Unifecaf@2024`
 

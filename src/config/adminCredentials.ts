@@ -15,8 +15,8 @@ export const ADMIN_MASTER_CREDENTIALS = [
   {
     id: 'admin-master-2',
     name: 'Rafael Alves',
-    email: 'rafael.alves@climatech.com',
-    password: 'Rafael@2024',
+    email: 'rafa_alves0901@hotmail.com',
+    password: 'rafa_0901',
     role: 'admin_master' as UserRole,
     twoFactorEnabled: false,
   },

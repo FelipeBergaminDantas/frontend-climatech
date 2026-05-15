@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -176,8 +176,22 @@ export function AuthLeftPanel() {
 
 // ── Login form ─────────────────────────────────────────────────────────────────
 export function LoginForm() {
-  const { login } = useAuth()
+  const { login, isAuthenticated, user } = useAuth()
   const router = useRouter()
+
+  // Prevent navigating back to protected pages when on login (e.g., after logout)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!isAuthenticated) {
+      const onPop = () => {
+        // Keep user on login if they try to go back
+        router.replace('/login')
+      }
+      window.addEventListener('popstate', onPop)
+      return () => window.removeEventListener('popstate', onPop)
+    }
+    return
+  }, [isAuthenticated, router])
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

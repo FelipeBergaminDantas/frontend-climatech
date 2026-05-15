@@ -148,8 +148,8 @@ export function Sidebar() {
   const { selectedClient, availableClients } = useClient()
   const [mobileOpen, setMobileOpen] = useState(false)
 
-  // Não mostrar sidebar na página de seleção de cliente
-  if (pathname === '/select-client') return null
+  // Não mostrar sidebar na página de seleção de cliente ou na tela de login
+  if (pathname === '/select-client' || pathname === '/login') return null
   
   if (!isAuthenticated) return null
 
@@ -228,18 +228,7 @@ export function Sidebar() {
             >
               <span style={{ color: active ? '#0ea5a0' : TEXT_MUTED }}>{icon}</span>
               {label}
-              {adminMasterOnly && (
-                <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                  style={{ background: 'rgba(124,58,237,0.1)', color: '#7c3aed' }}>
-                  MASTER
-                </span>
-              )}
-              {adminOnly && !adminMasterOnly && (
-                <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded"
-                  style={{ background: 'rgba(30,95,168,0.1)', color: '#1e5fa8' }}>
-                  ADM
-                </span>
-              )}
+              {/* removed admin-only badges per UX request */}
             </Link>
           )
         })}
