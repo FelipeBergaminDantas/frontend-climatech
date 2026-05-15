@@ -100,6 +100,76 @@ function PasswordConfirmModal({
   )
 }
 
+interface RoleConfirmModalProps {
+  target: User
+  adminEmail: string
+  onConfirm: () => void
+  onClose: () => void
+}
+
+function RoleConfirmModal({ target, adminEmail, onConfirm, onClose }: RoleConfirmModalProps) {
+  const [pwd, setPwd] = useState('')
+  const [error, setError] = useState('')
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    if (!authService.verifyPassword(adminEmail, pwd)) {
+      setError('Senha incorreta.')
+      return
+    }
+    onConfirm()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
+      <div className="w-full max-w-sm rounded-2xl p-6 space-y-4" style={{ background: 'white' }}>
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-lg" style={{ color: '#0f2744' }}>Confirmar alteração de perfil</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600" aria-label="Fechar">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <p className="text-sm text-slate-500">Digite sua senha para confirmar a mudança de perfil de <strong>{target.name}</strong>.</p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>Sua senha</label>
+            <input
+              type="password"
+              value={pwd}
+              onChange={e => setPwd(e.target.value)}
+              placeholder="Digite sua senha"
+              autoFocus
+              className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+              style={{ background: '#f8fafc', border: error ? '1.5px solid #fca5a5' : '1.5px solid #e2e8f0', color: '#0f2744' }}
+              required
+            />
+            {error && <p className="text-xs text-red-500">{error}</p>}
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium transition-all"
+              style={{ background: '#f0f4f8', color: '#64748b', border: '1px solid #e2e8f0' }}>
+              Cancelar
+            </button>
+            <button type="submit"
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white transition-all"
+              style={{ background: 'linear-gradient(135deg, #1e5fa8, #2d7dd2)' }}>
+              Confirmar
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const { user: currentUser } = useAuth()
