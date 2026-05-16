@@ -215,18 +215,19 @@ export function LoginForm() {
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!validateFields()) return
+    setGenericError('')
     setLoading(true)
     try {
-      const loggedUser = await login(email, password)
+      const loggedUser = await login(email, password, rememberMe)
       // Admin master vai para seleção de cliente, outros vão direto para dashboard
       if (loggedUser.role === 'admin_master') {
         router.push('/select-client')
       } else {
         router.push('/dashboard')
       }
-    } catch (err) {
-      console.error('Login error:', err)
-      setGenericError('E-mail ou senha incorretos. Tente novamente.')
+    } catch {
+      setGenericError('Informações inválidas')
+    } finally {
       setLoading(false)
     }
   }
@@ -258,14 +259,17 @@ export function LoginForm() {
 
       {/* Full-page loading overlay shown after successful login while navigating */}
       {loading && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/90 backdrop-blur-sm">
-          <div className="flex flex-col items-center gap-4">
-            <div className="relative w-12 h-12">
-              <div className="absolute inset-0 rounded-full border-4 border-slate-100" />
+        <div
+          className="fixed inset-0 flex items-center justify-center"
+          style={{ zIndex: 99999, backgroundColor: 'rgba(15,39,68,0.90)' }}
+        >
+          <div className="flex flex-col items-center gap-4 px-8 py-6 rounded-3xl" style={{ background: 'rgba(255,255,255,0.06)', boxShadow: '0 25px 80px rgba(0,0,0,0.18)' }}>
+            <div className="relative w-14 h-14">
+              <div className="absolute inset-0 rounded-full border-4 border-white/15" />
               <div className="absolute inset-0 rounded-full border-4 border-transparent"
-                style={{ borderTopColor: '#1e5fa8', borderRightColor: '#0ea5a0', animation: 'spin 0.9s linear infinite' }} />
+                style={{ borderTopColor: '#10c98f', borderRightColor: '#1e5fa8', animation: 'spin 0.9s linear infinite' }} />
             </div>
-            <p className="text-sm font-medium" style={{ color: '#64748b' }}>Entrando…</p>
+            <p className="text-base font-semibold text-white">Entrando…</p>
           </div>
         </div>
       )}
@@ -294,6 +298,12 @@ export function LoginForm() {
               <div className="mb-10">
                 <h2 className="text-4xl font-bold text-white mb-2">Entrar</h2>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.55)' }}>Acesse sua conta para continuar</p>
+                {genericError && (
+                  <p role="alert" aria-live="assertive" className="mt-4 rounded-2xl py-3 px-4 text-sm text-red-200"
+                    style={{ background: 'rgba(244,63,94,0.18)', border: '1px solid rgba(251,113,133,0.3)' }}>
+                    {genericError}
+                  </p>
+                )}
               </div>
 
               <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
@@ -325,7 +335,7 @@ export function LoginForm() {
                 </div>
 
                 {genericError && (
-                  <p role="alert" className="text-sm text-red-300 text-center rounded-2xl py-3 px-4"
+                  <p role="alert" aria-live="assertive" className="text-sm text-red-300 text-center rounded-2xl py-3 px-4"
                     style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)' }}>
                     {genericError}
                   </p>

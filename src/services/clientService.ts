@@ -1,5 +1,5 @@
 import type { Client } from '@/types'
-import { verifyPassword } from '@/services/authService'
+import { verifyCurrentPassword } from '@/services/userService'
 import type { ClienteCreate, ClienteResponse } from '@/services/apiService'
 import {
   getClientesFromBackend,
@@ -92,7 +92,9 @@ export async function updateClient(id: string, data: Partial<ClienteCreate>): Pr
 
 /** Ativa ou desativa um cliente com confirmação de senha */
 export async function toggleClientStatus(id: string, adminEmail: string, password: string): Promise<Client> {
-  if (!verifyPassword(adminEmail, password)) {
+  try {
+    await verifyCurrentPassword(password)
+  } catch {
     throw new Error('Senha incorreta')
   }
 

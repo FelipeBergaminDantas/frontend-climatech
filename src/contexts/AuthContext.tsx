@@ -9,8 +9,8 @@ interface AuthContextValue {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
-  login: (email: string, password: string) => Promise<User>
-  logout: () => void
+  login: (email: string, password: string, rememberMe?: boolean) => Promise<User>
+  logout: () => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
   verify2FA: (token: string) => Promise<boolean>
   updateUser: (data: Partial<User>) => void
@@ -25,11 +25,15 @@ export const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [useLocalStorage, setUseLocalStorage] = useState(false)
 
-  // Restore session from sessionStorage on mount
+  // Restore session from localStorage or sessionStorage on mount
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(SESSION_KEY)
+      const localRaw = localStorage.getItem(SESSION_KEY)
+      const sessionRaw = sessionStorage.getItem(SESSION_KEY)
+      const raw = localRaw ?? sessionRaw
+
       if (raw) {
         const persisted: PersistedUser = JSON.parse(raw)
         setUser({
@@ -42,15 +46,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clientId: persisted.clientId,
           selectedClientId: persisted.selectedClientId,
         })
+        setUseLocalStorage(!!localRaw)
       }
     } catch {
+      localStorage.removeItem(SESSION_KEY)
       sessionStorage.removeItem(SESSION_KEY)
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  function persistUser(u: User) {
+  function persistUser(u: User, rememberMe = false) {
     const persisted: PersistedUser = {
       id: u.id,
       name: u.name,
@@ -61,25 +67,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clientId: u.clientId,
       selectedClientId: u.selectedClientId,
     }
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(persisted))
+
+    localStorage.removeItem(SESSION_KEY)
+    sessionStorage.removeItem(SESSION_KEY)
+
+    if (rememberMe) {
+      localStorage.setItem(SESSION_KEY, JSON.stringify(persisted))
+    } else {
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(persisted))
+    }
   }
 
-  async function login(email: string, password: string): Promise<User> {
+  async function login(email: string, password: string, rememberMe = false): Promise<User> {
     setIsLoading(true)
     try {
-      const loggedIn = authService.login(email, password)
+      const loggedIn = await authService.login(email, password, rememberMe)
       setUser(loggedIn)
-      persistUser(loggedIn)
+      setUseLocalStorage(rememberMe)
+      persistUser(loggedIn, rememberMe)
       return loggedIn
     } finally {
       setIsLoading(false)
     }
   }
 
-  function logout() {
-    authService.logout()
+  async function logout() {
+    await authService.logout()
     setUser(null)
+    localStorage.removeItem(SESSION_KEY)
     sessionStorage.removeItem(SESSION_KEY)
+    setUseLocalStorage(false)
   }
 
   async function register(name: string, email: string, password: string) {
@@ -99,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser((prev) => {
       if (!prev) return prev
       const updated = { ...prev, ...data }
-      persistUser(updated)
+      persistUser(updated, useLocalStorage)
       return updated
     })
   }

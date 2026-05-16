@@ -42,7 +42,7 @@ function RouteGuard({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, isAuthenticated, isPublic, user, pathname])
 
-  if (isLoading) return null
+  if (isLoading && !isPublic) return null
   if (!isAuthenticated && !isPublic) return null
 
   return <>{children}</>

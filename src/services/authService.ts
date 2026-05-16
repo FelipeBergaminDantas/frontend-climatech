@@ -1,8 +1,8 @@
 import type { User, UserRole } from '@/types';
-import { mockUser, mockAdmin } from './mockData';
 import { validatePassword } from '@/utils/validators';
-import { MOCK_2FA_TOKEN } from '@/config/constants';
+import { MOCK_2FA_TOKEN, ACCESS_TOKEN_KEY } from '@/config/constants';
 import { ADMIN_MASTER_CREDENTIALS } from '@/config/adminCredentials';
+import { API_BASE_URL } from '@/services/apiService';
 
 // In-memory store for registered users (mock)
 let users: (User & { password: string })[] = [
@@ -32,18 +32,81 @@ let users: (User & { password: string })[] = [
 
 let currentSession: User | null = null;
 
+function setAccessToken(token: string | null, rememberMe = false) {
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
 
-
-export function login(email: string, password: string): User {
-  const user = users.find(
-    (u) => u.email === email && u.password === password
-  );
-  if (!user) {
-    throw new Error('Credenciais inválidas.');
+  if (token) {
+    const storage = rememberMe ? localStorage : sessionStorage;
+    storage.setItem(ACCESS_TOKEN_KEY, token);
   }
-  const { password: _pw, ...userWithoutPassword } = user;
-  currentSession = userWithoutPassword;
-  return userWithoutPassword;
+}
+
+export function getAccessToken(): string | null {
+  return localStorage.getItem(ACCESS_TOKEN_KEY) ?? sessionStorage.getItem(ACCESS_TOKEN_KEY);
+}
+
+function syncCurrentSession(user: User | null) {
+  currentSession = user;
+}
+
+function clearSession() {
+  syncCurrentSession(null);
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+}
+
+export async function login(email: string, password: string, rememberMe = false): Promise<User> {
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    credentials: 'include',
+    body: JSON.stringify({
+      email,
+      password,
+      remember_me: rememberMe,
+    }),
+  });
+
+  if (!response.ok) {
+    await response.json().catch(() => null);
+    throw new Error('Informações inválidas');
+  }
+
+  const result = await response.json();
+  const user: User = result.data.user;
+  const token = result.data.access_token;
+
+  syncCurrentSession(user);
+  setAccessToken(token, rememberMe);
+
+  return user;
+}
+
+export async function logout(): Promise<void> {
+  await fetch(`${API_BASE_URL}/auth/logout`, {
+    method: 'POST',
+    credentials: 'include',
+  }).catch(() => {
+    // Ignore logout errors to preserve client state
+  });
+  clearSession();
+}
+
+export async function refreshAccessToken(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha ao renovar sessão.');
+  }
+
+  const result = await response.json();
+  setAccessToken(result.data.access_token);
 }
 
 export function register(name: string, email: string, password: string): User {
@@ -67,16 +130,11 @@ export function register(name: string, email: string, password: string): User {
   const { password: _pw, ...userWithoutPassword } = newUser;
   return userWithoutPassword;
 }
-
 export function verify2FA(token: string): boolean {
   if (token !== MOCK_2FA_TOKEN) {
     throw new Error('Token 2FA inválido.');
   }
   return true;
-}
-
-export function logout(): void {
-  currentSession = null;
 }
 
 export function uploadAvatar(file: File): string {
@@ -90,11 +148,9 @@ export function uploadAvatar(file: File): string {
     throw new Error('Arquivo muito grande. Tamanho máximo: 2 MB.');
   }
 
-  // Simulate returning a URL
   const fakeUrl = `https://cdn.climatech.app/avatars/${Date.now()}.jpg`;
   return fakeUrl;
 }
-
 export function getCurrentSession(): User | null {
   return currentSession;
 }
@@ -102,61 +158,4 @@ export function getCurrentSession(): User | null {
 /** Returns true if the given email belongs to a registered user. */
 export function isEmailRegistered(email: string): boolean {
   return users.some(u => u.email.toLowerCase() === email.toLowerCase())
-}
-
-/** Returns all users (without passwords) — admin only */
-export function getAllUsers(): User[] {
-  return users.map(({ password: _pw, ...u }) => u)
-}
-
-/** Creates a user with a specific role — admin only */
-export function adminCreateUser(
-  name: string,
-  email: string,
-  password: string,
-  role: UserRole,
-  clientId?: string
-): User {
-  validatePassword(password);
-  if (users.find((u) => u.email === email)) throw new Error('E-mail já cadastrado.');
-  
-  // Validar que admin_client e user precisam de clientId
-  // Admin Master não precisa de clientId
-  if ((role === 'admin_client' || role === 'user') && !clientId) {
-    throw new Error('clientId é obrigatório para este tipo de usuário.');
-  }
-  
-  const newUser = {
-    id: `user-${Date.now()}`,
-    name,
-    email,
-    twoFactorEnabled: false,
-    role,
-    clientId: role === 'admin_master' ? undefined : clientId,
-    password,
-  };
-  users.push(newUser);
-  const { password: _pw, ...u } = newUser;
-  return u;
-}
-
-/** Deletes a user by id */
-export function deleteUser(id: string): void {
-  users = users.filter(u => u.id !== id)
-}
-
-/** Verifies the password of a user by email — used for admin confirmation */
-export function verifyPassword(email: string, password: string): boolean {
-  return users.some(u => u.email === email && u.password === password)
-}
-
-/** Toggles a user's role between 'user' and 'admin_client' */
-export function toggleUserRole(id: string): void {
-  const idx = users.findIndex((u) => u.id === id);
-  if (idx === -1) return;
-  const currentRole = users[idx].role;
-  // Não permite alterar admin_master
-  if (currentRole === 'admin_master') return;
-  const newRole: UserRole = currentRole === 'user' ? 'admin_client' : 'user';
-  users[idx] = { ...users[idx], role: newRole };
 }

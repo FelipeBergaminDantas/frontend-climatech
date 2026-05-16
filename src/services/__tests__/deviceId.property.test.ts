@@ -30,6 +30,8 @@ describe('roomService.createRoom — deviceId único por usuário', () => {
           // Cria a primeira sala com sucesso
           createRoom({
             userId: 'user-test',
+            clientId: 'client-test',
+            acCount: 1,
             name: name1.length >= 2 ? name1 : 'Sala A',
             deviceId,
             idealTempMin: 18,
@@ -40,6 +42,8 @@ describe('roomService.createRoom — deviceId único por usuário', () => {
           expect(() =>
             createRoom({
               userId: 'user-test',
+              clientId: 'client-test',
+              acCount: 1,
               name: name2.length >= 2 ? name2 : 'Sala B',
               deviceId,
               idealTempMin: 18,
@@ -60,6 +64,8 @@ describe('roomService.createRoom — deviceId único por usuário', () => {
         expect(() => {
           createRoom({
             userId: 'user-A',
+            clientId: 'client-A',
+            acCount: 1,
             name: 'Sala A',
             deviceId,
             idealTempMin: 18,
@@ -67,6 +73,8 @@ describe('roomService.createRoom — deviceId único por usuário', () => {
           })
           createRoom({
             userId: 'user-B',
+            clientId: 'client-B',
+            acCount: 1,
             name: 'Sala B',
             deviceId,
             idealTempMin: 18,
@@ -89,6 +97,8 @@ describe('roomService.createRoom — deviceId único por usuário', () => {
             deviceIds.forEach((deviceId, i) => {
               createRoom({
                 userId: 'user-test',
+                clientId: 'client-test',
+                acCount: 1,
                 name: `Sala ${i + 1}`,
                 deviceId,
                 idealTempMin: 18,

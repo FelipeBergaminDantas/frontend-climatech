@@ -1,15 +1,15 @@
 'use client'
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, type ReactNode } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useClient } from '@/contexts/ClientContext'
 import { useClientStatus } from '@/hooks/useClientStatus'
-import * as authService from '@/services/authService'
+import * as userService from '@/services/userService'
 import { validateEmail } from '@/utils/validators'
 import { getClientName } from '@/services/clientService'
 import type { User, UserRole } from '@/types'
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="rounded-2xl p-5 sm:p-6 space-y-4" style={{ background: 'white', border: '1px solid #e8edf5' }}>
       <h2 className="font-semibold" style={{ color: '#0f2744' }}>{title}</h2>
@@ -18,37 +18,38 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-// ── Password confirmation modal ────────────────────────────────────────────
 interface PasswordConfirmModalProps {
   title: string
   message: string
-  adminEmail: string
-  onConfirm: (password: string) => void
+  onConfirm: (password: string) => Promise<void>
   onClose: () => void
   confirmButtonText?: string
   isDangerous?: boolean
 }
 
-function PasswordConfirmModal({ 
-  title, 
-  message, 
-  adminEmail, 
-  onConfirm, 
+function PasswordConfirmModal({
+  title,
+  message,
+  onConfirm,
   onClose,
   confirmButtonText = 'Confirmar',
-  isDangerous = false
+  isDangerous = false,
 }: PasswordConfirmModalProps) {
   const [pwd, setPwd] = useState('')
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (!authService.verifyPassword(adminEmail, pwd)) {
-      setError('Senha incorreta.')
-      return
+    setIsSubmitting(true)
+    try {
+      await onConfirm(pwd)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao verificar senha.')
+    } finally {
+      setIsSubmitting(false)
     }
-    onConfirm(pwd)
   }
 
   return (
@@ -89,9 +90,10 @@ function PasswordConfirmModal({
               Cancelar
             </button>
             <button type="submit"
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white transition-all"
+              disabled={isSubmitting}
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50"
               style={{ background: isDangerous ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #1e5fa8, #2d7dd2)' }}>
-              {confirmButtonText}
+              {isSubmitting ? 'Confirmando…' : confirmButtonText}
             </button>
           </div>
         </form>
@@ -102,23 +104,26 @@ function PasswordConfirmModal({
 
 interface RoleConfirmModalProps {
   target: User
-  adminEmail: string
-  onConfirm: () => void
+  onConfirm: (password: string) => Promise<void>
   onClose: () => void
 }
 
-function RoleConfirmModal({ target, adminEmail, onConfirm, onClose }: RoleConfirmModalProps) {
+function RoleConfirmModal({ target, onConfirm, onClose }: RoleConfirmModalProps) {
   const [pwd, setPwd] = useState('')
   const [error, setError] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
-    if (!authService.verifyPassword(adminEmail, pwd)) {
-      setError('Senha incorreta.')
-      return
+    setIsSubmitting(true)
+    try {
+      await onConfirm(pwd)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erro ao verificar senha.')
+    } finally {
+      setIsSubmitting(false)
     }
-    onConfirm()
   }
 
   return (
@@ -159,9 +164,10 @@ function RoleConfirmModal({ target, adminEmail, onConfirm, onClose }: RoleConfir
               Cancelar
             </button>
             <button type="submit"
-              className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white transition-all"
+              disabled={isSubmitting}
+              className="flex-1 py-2.5 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50"
               style={{ background: 'linear-gradient(135deg, #1e5fa8, #2d7dd2)' }}>
-              Confirmar
+              {isSubmitting ? 'Confirmando…' : 'Confirmar'}
             </button>
           </div>
         </form>
@@ -170,7 +176,6 @@ function RoleConfirmModal({ target, adminEmail, onConfirm, onClose }: RoleConfir
   )
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
 export default function UsersPage() {
   const { user: currentUser } = useAuth()
   const { availableClients } = useClient()
@@ -178,64 +183,11 @@ export default function UsersPage() {
   const isAdmin = currentUser?.role === 'admin_master' || currentUser?.role === 'admin_client'
   const isOverviewMode = currentUser?.role === 'admin_master' && !currentUser?.selectedClientId
 
-  const [allUsers, setAllUsers] = useState<User[]>(() => authService.getAllUsers())
+  const [allUsers, setAllUsers] = useState<User[]>([])
   const [roleTarget, setRoleTarget] = useState<User | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
-  const [filterClient, setFilterClient] = useState<string>('all') // Novo filtro de cliente
-
-  // Filtrar usuários baseado no cliente selecionado
-  const users = allUsers.filter(u => {
-    // Admin Master vê apenas usuários do cliente selecionado + outros Admin Masters
-    if (currentUser?.role === 'admin_master') {
-      if (!currentUser.selectedClientId) {
-        // Visão de todos os clientes: mostra todos
-        return true
-      }
-      return u.clientId === currentUser.selectedClientId || u.role === 'admin_master'
-    }
-    // Admin Cliente vê apenas usuários do seu cliente (SEM Admin Masters)
-    if (currentUser?.role === 'admin_client') {
-      return u.clientId === currentUser.clientId && u.role !== 'admin_master'
-    }
-    // Usuários normais não deveriam estar aqui, mas por segurança
-    return u.id === currentUser?.id
-  })
-
-  // Aplicar filtro de cliente no modo overview
-  const filteredUsers = isOverviewMode && filterClient !== 'all'
-    ? users.filter(u => u.clientId === filterClient || u.role === 'admin_master')
-    : users
-
-  // Obter lista única de clientIds
-  const clientIds = useMemo(() => {
-    return Array.from(new Set(users.filter(u => u.clientId).map(u => u.clientId!)))
-  }, [users])
-
-  // Agrupar usuários por cliente
-  const usersByClient = useMemo(() => {
-    if (!isOverviewMode) return {}
-    
-    const grouped: Record<string, typeof users> = {}
-    
-    // Adicionar Admin Masters em grupo separado
-    const adminMasters = users.filter(u => u.role === 'admin_master')
-    if (adminMasters.length > 0) {
-      grouped['admin_masters'] = adminMasters
-    }
-    
-    // Agrupar outros usuários por cliente
-    users.filter(u => u.clientId).forEach(user => {
-      if (!grouped[user.clientId!]) {
-        grouped[user.clientId!] = []
-      }
-      grouped[user.clientId!].push(user)
-    })
-    
-    return grouped
-  }, [isOverviewMode, users])
-
-  // New user form
+  const [filterClient, setFilterClient] = useState<string>('all')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -244,8 +196,26 @@ export default function UsersPage() {
   const [formError, setFormError] = useState('')
   const [formSuccess, setFormSuccess] = useState('')
   const [loading, setLoading] = useState(false)
+  const [loadingUsers, setLoadingUsers] = useState(false)
 
-  // Resetar selectedClientId quando role muda para admin_master
+  useEffect(() => {
+    async function loadUsers() {
+      setLoadingUsers(true)
+      try {
+        const users = await userService.getUsers()
+        setAllUsers(users)
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setLoadingUsers(false)
+      }
+    }
+
+    if (isAdmin) {
+      loadUsers()
+    }
+  }, [isAdmin])
+
   useEffect(() => {
     if (role === 'admin_master') {
       setSelectedClientId('')
@@ -253,6 +223,120 @@ export default function UsersPage() {
       setSelectedClientId(availableClients[0].id)
     }
   }, [role, currentUser?.role, availableClients, selectedClientId])
+
+  const users = allUsers.filter(u => {
+    if (currentUser?.role === 'admin_master') {
+      if (!currentUser.selectedClientId) {
+        return true
+      }
+      return u.clientId === currentUser.selectedClientId || u.role === 'admin_master'
+    }
+    if (currentUser?.role === 'admin_client') {
+      return u.clientId === currentUser.clientId && u.role !== 'admin_master'
+    }
+    return u.id === currentUser?.id
+  })
+
+  const filteredUsers = isOverviewMode && filterClient !== 'all'
+    ? users.filter(u => u.clientId === filterClient || u.role === 'admin_master')
+    : users
+
+  const clientIds = useMemo(() => {
+    return Array.from(new Set(users.filter(u => u.clientId).map(u => u.clientId!)))
+  }, [users])
+
+  const usersByClient = useMemo(() => {
+    if (!isOverviewMode) return {}
+
+    const grouped: Record<string, typeof users> = {}
+    const adminMasters = users.filter(u => u.role === 'admin_master')
+    if (adminMasters.length > 0) {
+      grouped['admin_masters'] = adminMasters
+    }
+    users.filter(u => u.clientId).forEach(user => {
+      if (!grouped[user.clientId!]) {
+        grouped[user.clientId!] = []
+      }
+      grouped[user.clientId!].push(user)
+    })
+    return grouped
+  }, [isOverviewMode, users])
+
+  async function refreshUsers() {
+    setLoadingUsers(true)
+    try {
+      const users = await userService.getUsers()
+      setAllUsers(users)
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault()
+    setFormError(''); setFormSuccess('')
+    try { validateEmail(email) } catch { setFormError('E-mail inválido.'); return }
+    if (password.length < 8) { setFormError('Senha deve ter no mínimo 8 caracteres.'); return }
+    if (currentUser?.role === 'admin_master' && role !== 'admin_master' && !selectedClientId) {
+      setFormError('Selecione um cliente para este usuário.')
+      return
+    }
+
+    setLoading(true)
+    try {
+      const clientId = role !== 'admin_master'
+        ? currentUser?.role === 'admin_master'
+          ? selectedClientId
+          : currentUser?.clientId
+        : undefined
+
+      await userService.createUser({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+        role,
+        clientId,
+      })
+      await refreshUsers()
+      setName(''); setEmail(''); setPassword(''); setRole('user')
+      setFormSuccess('Usuário criado com sucesso.')
+      setTimeout(() => setFormSuccess(''), 3000)
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Erro ao criar usuário.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleDeleteConfirmed(password: string) {
+    if (!deleteTarget) return
+    setLoading(true)
+    try {
+      await userService.verifyCurrentPassword(password)
+      await userService.deleteUser(deleteTarget.id)
+      await refreshUsers()
+      setDeleteTarget(null)
+      setShowPasswordModal(false)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleRoleConfirmed(password: string) {
+    if (!roleTarget) return
+    setLoading(true)
+    try {
+      await userService.verifyCurrentPassword(password)
+      const newRole = roleTarget.role === 'admin_client' ? 'user' : 'admin_client'
+      await userService.changeUserRole(roleTarget.id, { role: newRole })
+      await refreshUsers()
+      setRoleTarget(null)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (!isAdmin) {
     return (
@@ -271,79 +355,19 @@ export default function UsersPage() {
     )
   }
 
-  async function handleCreate(e: React.FormEvent) {
-    e.preventDefault()
-    setFormError(''); setFormSuccess('')
-    try { validateEmail(email) } catch { setFormError('E-mail inválido.'); return }
-    if (password.length < 8) { setFormError('Senha deve ter no mínimo 8 caracteres.'); return }
-    
-    // Validar seleção de cliente para admin_master criando usuários não-master
-    if (currentUser?.role === 'admin_master' && role !== 'admin_master' && !selectedClientId) {
-      setFormError('Selecione um cliente para este usuário.')
-      return
-    }
-    
-    setLoading(true)
-    try {
-      // Determina o clientId baseado no usuário atual e role
-      let clientId: string | undefined
-      if (role !== 'admin_master') {
-        if (currentUser?.role === 'admin_master') {
-          clientId = selectedClientId
-        } else {
-          clientId = currentUser?.clientId
-        }
-      }
-      
-      authService.adminCreateUser(name.trim(), email.trim(), password, role, clientId)
-      setAllUsers(authService.getAllUsers())
-      setName(''); setEmail(''); setPassword(''); setRole('user')
-      setFormSuccess('Usuário criado com sucesso.')
-      setTimeout(() => setFormSuccess(''), 3000)
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Erro ao criar usuário.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  function handleDelete(id: string) {
-    if (id === currentUser?.id) { setFormError('Você não pode excluir sua própria conta.'); return }
-    const target = allUsers.find(u => u.id === id) || null
-    setDeleteTarget(target)
-    setShowPasswordModal(true)
-  }
-
-  function handleDeleteConfirmed(_password: string) {
-    if (!deleteTarget) return
-    authService.deleteUser(deleteTarget.id)
-    setAllUsers(authService.getAllUsers())
-    setDeleteTarget(null)
-    setShowPasswordModal(false)
-  }
-
-  function handleRoleConfirmed() {
-    if (!roleTarget) return
-    authService.toggleUserRole(roleTarget.id)
-    setAllUsers(authService.getAllUsers())
-    setRoleTarget(null)
-  }
-
   return (
     <main className="min-h-screen px-4 sm:px-6 py-6 sm:py-8 pb-16 bg-white">
-      {roleTarget && currentUser && (
+      {roleTarget && (
         <RoleConfirmModal
           target={roleTarget}
-          adminEmail={currentUser.email}
           onConfirm={handleRoleConfirmed}
           onClose={() => setRoleTarget(null)}
         />
       )}
-      {showPasswordModal && currentUser && (
+      {showPasswordModal && (
         <PasswordConfirmModal
           title="Confirmar Exclusão"
           message="Digite sua senha para confirmar a exclusão permanente deste usuário. Esta ação é irreversível."
-          adminEmail={currentUser.email}
           onConfirm={handleDeleteConfirmed}
           onClose={() => setShowPasswordModal(false)}
           confirmButtonText="Excluir"
@@ -369,7 +393,6 @@ export default function UsersPage() {
           </div>
         </div>
 
-        {/* Filtro de cliente (apenas no modo overview) */}
         {isOverviewMode && clientIds.length > 0 && (
           <div className="flex items-center gap-3">
             <label className="text-sm font-medium" style={{ color: '#0f2744' }}>Filtrar por cliente:</label>
@@ -390,15 +413,16 @@ export default function UsersPage() {
         )}
 
         <Section title="Usuários cadastrados">
-          {isOverviewMode && filterClient === 'all' ? (
-            // Modo overview: agrupar por cliente
+          {loadingUsers ? (
+            <p className="text-sm text-slate-500">Carregando usuários...</p>
+          ) : isOverviewMode && filterClient === 'all' ? (
             <div className="space-y-6">
               {Object.entries(usersByClient).map(([groupKey, groupUsers]) => {
                 const isAdminMasterGroup = groupKey === 'admin_masters'
-                const groupName = isAdminMasterGroup 
-                  ? 'Administradores Master' 
+                const groupName = isAdminMasterGroup
+                  ? 'Administradores Master'
                   : getClientName(groupKey)
-                
+
                 return (
                   <div key={groupKey}>
                     <h3 className="text-sm font-semibold mb-3" style={{ color: isAdminMasterGroup ? '#7c3aed' : '#1e5fa8' }}>
@@ -409,12 +433,12 @@ export default function UsersPage() {
                         <div key={u.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 first:pt-0 last:pb-0">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-                              style={{ 
-                                background: u.role === 'admin_master' 
-                                  ? 'linear-gradient(135deg, #7c3aed, #a855f7)' 
+                              style={{
+                                background: u.role === 'admin_master'
+                                  ? 'linear-gradient(135deg, #7c3aed, #a855f7)'
                                   : u.role === 'admin_client'
-                                  ? 'linear-gradient(135deg, #1e5fa8, #2d7dd2)' 
-                                  : 'linear-gradient(135deg, #0ea5a0, #10c98f)' 
+                                  ? 'linear-gradient(135deg, #1e5fa8, #2d7dd2)'
+                                  : 'linear-gradient(135deg, #0ea5a0, #10c98f)'
                               }}>
                               {u.name?.[0]?.toUpperCase() ?? '?'}
                             </div>
@@ -448,7 +472,10 @@ export default function UsersPage() {
                                   {u.role === 'admin_client' ? '↓ Usuário' : '↑ Admin'}
                                 </button>
                                 <button
-                                  onClick={() => handleDelete(u.id)}
+                                  onClick={() => {
+                                    setDeleteTarget(u)
+                                    setShowPasswordModal(true)
+                                  }}
                                   className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
                                   style={{ background: '#fff1f2', color: '#ef4444', border: '1px solid #fecdd3' }}
                                 >
@@ -465,18 +492,17 @@ export default function UsersPage() {
               })}
             </div>
           ) : (
-            // Modo normal ou filtrado: lista simples
             <div className="divide-y divide-slate-50">
               {filteredUsers.map(u => (
                 <div key={u.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 first:pt-0 last:pb-0">
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white shrink-0"
-                      style={{ 
-                        background: u.role === 'admin_master' 
-                          ? 'linear-gradient(135deg, #7c3aed, #a855f7)' 
+                      style={{
+                        background: u.role === 'admin_master'
+                          ? 'linear-gradient(135deg, #7c3aed, #a855f7)'
                           : u.role === 'admin_client'
-                          ? 'linear-gradient(135deg, #1e5fa8, #2d7dd2)' 
-                          : 'linear-gradient(135deg, #0ea5a0, #10c98f)' 
+                          ? 'linear-gradient(135deg, #1e5fa8, #2d7dd2)'
+                          : 'linear-gradient(135deg, #0ea5a0, #10c98f)'
                       }}>
                       {u.name?.[0]?.toUpperCase() ?? '?'}
                     </div>
@@ -510,7 +536,10 @@ export default function UsersPage() {
                           {u.role === 'admin_client' ? '↓ Usuário' : '↑ Admin'}
                         </button>
                         <button
-                          onClick={() => handleDelete(u.id)}
+                          onClick={() => {
+                            setDeleteTarget(u)
+                            setShowPasswordModal(true)
+                          }}
                           className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
                           style={{ background: '#fff1f2', color: '#ef4444', border: '1px solid #fecdd3' }}
                         >
@@ -541,67 +570,66 @@ export default function UsersPage() {
           )}
           <form onSubmit={handleCreate} className="space-y-4">
             <fieldset disabled={!canCreate && !isOverviewMode} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>Nome</label>
-                <input value={name} onChange={e => setName(e.target.value)} required
-                  placeholder="Nome completo"
-                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>E-mail</label>
-                <input value={email} onChange={e => setEmail(e.target.value)} type="email" required
-                  placeholder="email@exemplo.com"
-                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>Senha</label>
-                <input value={password} onChange={e => setPassword(e.target.value)} type="password" required
-                  placeholder="Mínimo 8 caracteres"
-                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }} />
-              </div>
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>Perfil</label>
-                <select value={role} onChange={e => setRole(e.target.value as UserRole)}
-                  className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                  style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }}>
-                  <option value="user">Usuário</option>
-                  <option value="admin_client">Administrador</option>
-                  {currentUser?.role === 'admin_master' && (
-                    <option value="admin_master">Administrador Master</option>
-                  )}
-                </select>
-              </div>
-              
-              {/* Campo de seleção de cliente - apenas para admin_master criando usuários não-master */}
-              {currentUser?.role === 'admin_master' && role !== 'admin_master' && availableClients.length > 0 && (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>
-                    Cliente <span className="text-red-500">*</span>
-                  </label>
-                  <select 
-                    value={selectedClientId} 
-                    onChange={e => setSelectedClientId(e.target.value)}
-                    required
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>Nome</label>
+                  <input value={name} onChange={e => setName(e.target.value)} required
+                    placeholder="Nome completo"
                     className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
-                    style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }}
-                  >
-                    <option value="">Selecione um cliente</option>
-                    {availableClients.map(client => (
-                      <option key={client.id} value={client.id}>
-                        {client.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-slate-400">
-                    Este usuário terá acesso apenas aos dados deste cliente
-                  </p>
+                    style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }} />
                 </div>
-              )}
-            </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>E-mail</label>
+                  <input value={email} onChange={e => setEmail(e.target.value)} type="email" required
+                    placeholder="email@exemplo.com"
+                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                    style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>Senha</label>
+                  <input value={password} onChange={e => setPassword(e.target.value)} type="password" required
+                    placeholder="Mínimo 8 caracteres"
+                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                    style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>Perfil</label>
+                  <select value={role} onChange={e => setRole(e.target.value as UserRole)}
+                    className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                    style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }}>
+                    <option value="user">Usuário</option>
+                    <option value="admin_client">Administrador</option>
+                    {currentUser?.role === 'admin_master' && (
+                      <option value="admin_master">Administrador Master</option>
+                    )}
+                  </select>
+                </div>
+
+                {currentUser?.role === 'admin_master' && role !== 'admin_master' && availableClients.length > 0 && (
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>
+                      Cliente <span className="text-red-500">*</span>
+                    </label>
+                    <select 
+                      value={selectedClientId} 
+                      onChange={e => setSelectedClientId(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 rounded-xl text-sm outline-none"
+                      style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }}
+                    >
+                      <option value="">Selecione um cliente</option>
+                      {availableClients.map(client => (
+                        <option key={client.id} value={client.id}>
+                          {client.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-400">
+                      Este usuário terá acesso apenas aos dados deste cliente
+                    </p>
+                  </div>
+                )}
+              </div>
             </fieldset>
 
             {formError && <p className="text-sm text-red-500">{formError}</p>}

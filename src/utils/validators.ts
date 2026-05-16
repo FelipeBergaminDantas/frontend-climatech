@@ -25,11 +25,26 @@ export function validateEmail(email: string): void {
 export function getIndicatorStatus(
   currentTemp: number,
   targetTemp: number
+): IndicatorStatus
+export function getIndicatorStatus(
+  currentTemp: number,
+  idealMin: number,
+  idealMax: number
+): IndicatorStatus
+export function getIndicatorStatus(
+  currentTemp: number,
+  targetOrMin: number,
+  idealMax?: number
 ): IndicatorStatus {
-  const diff = Math.abs(currentTemp - targetTemp);
-  if (diff <= 0.5) return 'ok';
-  if (diff <= 3) return 'warning';
-  return 'critical';
+  const targetTemp =
+    idealMax === undefined
+      ? targetOrMin
+      : (targetOrMin + idealMax) / 2
+
+  const diff = Math.abs(currentTemp - targetTemp)
+  if (diff <= 0.5) return 'ok'
+  if (diff <= 3) return 'warning'
+  return 'critical'
 }
 
 /**
