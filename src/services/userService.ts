@@ -33,7 +33,7 @@ export interface UserRoleChangePayload {
 
 export async function getUsers(onlyActive = true): Promise<User[]> {
   const queryString = new URLSearchParams({ only_active: String(onlyActive) })
-  const response = await fetch(`${API_BASE_URL}/users?${queryString.toString()}`, {
+  const response = await fetch(`${API_BASE_URL}/users/?${queryString.toString()}`, {
     method: 'GET',
     headers: buildHeaders(),
     credentials: 'include',
@@ -42,7 +42,7 @@ export async function getUsers(onlyActive = true): Promise<User[]> {
 }
 
 export async function createUser(payload: UserCreatePayload): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/users`, {
+  const response = await fetch(`${API_BASE_URL}/users/`, {
     method: 'POST',
     headers: buildHeaders(),
     credentials: 'include',
