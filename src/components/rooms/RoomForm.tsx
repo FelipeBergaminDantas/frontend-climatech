@@ -5,9 +5,25 @@ import type { Room } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
+const CTN_R_PATTERN = /^CTN-R-V\d+-\d+$/i
+const CTN_C_PATTERN = /^CTN-C-V\d+-\d+$/i
+
+function padNumber(value: number, length: number) {
+  return String(value).padStart(length, '0')
+}
+
+function buildDefaultCtnrNodeId() {
+  return 'CTN-R-V'
+}
+
+function buildDefaultCtncNodeIds(count: number): string[] {
+  const validCount = Math.max(1, count)
+  return Array.from({ length: validCount }, () => 'CTN-C-V')
+}
+
 interface RoomFormProps {
   userId: string
-  onSave: (room: Room) => void
+  onSave: (room: Room) => Promise<void>
   onCancel: () => void
   initialRoom?: Room
 }
@@ -15,21 +31,56 @@ interface RoomFormProps {
 interface FormErrors {
   name?: string
   deviceId?: string
-  location?: string
   acCount?: string
   idealTempMin?: string
   idealTempMax?: string
 }
 
 export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProps) {
+  const isEditing = Boolean(initialRoom)
   const [name, setName] = useState(initialRoom?.name ?? '')
-  const [deviceId, setDeviceId] = useState(initialRoom?.deviceId ?? '')
-  const [location, setLocation] = useState(initialRoom?.location ?? '')
+  const [deviceId, setDeviceId] = useState(initialRoom?.deviceId ?? buildDefaultCtnrNodeId())
   const [acCount, setAcCount] = useState(initialRoom?.acCount?.toString() ?? '1')
+  const [ctncNodeIds, setCtncNodeIds] = useState<string[]>(
+    initialRoom?.ctncNodeIds?.length ? initialRoom.ctncNodeIds : buildDefaultCtncNodeIds(1)
+  )
   const [idealTempMin, setIdealTempMin] = useState(initialRoom?.idealTempMin?.toString() ?? '')
   const [idealTempMax, setIdealTempMax] = useState(initialRoom?.idealTempMax?.toString() ?? '')
   const [errors, setErrors] = useState<FormErrors>({})
   const [isLoading, setIsLoading] = useState(false)
+
+  function updateCtncNodes(count: number) {
+    setCtncNodeIds((prev) => {
+      const validCount = Math.max(1, count)
+      if (prev.length === validCount) return prev
+      if (prev.length > validCount) return prev.slice(0, validCount)
+      return [...prev, ...Array(validCount - prev.length).fill('CTN-C-V')]
+    })
+  }
+
+  function handleAcCountChange(value: string) {
+    setAcCount(value)
+    const parsed = parseInt(value, 10)
+    if (!isNaN(parsed)) {
+      updateCtncNodes(parsed)
+    }
+  }
+
+  function formatNodeInput(raw: string, kind: 'CTNR' | 'CTNC') {
+    const prefix = kind === 'CTNR' ? 'CTN-R-V' : 'CTN-C-V'
+    const value = raw.toUpperCase().replace(/\s+/g, '')
+    const content = value.startsWith(prefix)
+      ? value.slice(prefix.length)
+      : value.replace(/^CTN-[RC]-?V?/i, '')
+
+    const digitsOnly = content.replace(/[^0-9-]/g, '').replace(/^-+/, '')
+    if (!digitsOnly) return prefix
+
+    const [version, rest = ''] = digitsOnly.split('-', 2)
+    if (!version) return prefix
+    if (!rest) return `${prefix}${version}-`
+    return `${prefix}${version}-${rest}`
+  }
 
   function validate(): boolean {
     const next: FormErrors = {}
@@ -42,16 +93,36 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
 
     if (!deviceId.trim()) {
       next.deviceId = 'Identificador do dispositivo é obrigatório.'
-    }
-
-    if (!location.trim()) {
-      next.location = 'Localização é obrigatória.'
+    } else if (!CTN_R_PATTERN.test(deviceId.trim())) {
+      next.deviceId = 'CTN-R deve seguir o padrão CTN-R-VX-XXX.'
     }
 
     const ac = parseInt(acCount)
     if (isNaN(ac) || ac < 1) {
       next.acCount = 'Informe ao menos 1 AC. Serão criados 1 CTN-R + N CTN-C nodes.'
     }
+
+    if (ctncNodeIds.length === 0) {
+      next.acCount = 'Ao menos um CTN-C deve ser informado.'
+    }
+
+    if (!isNaN(ac) && ctncNodeIds.length !== ac) {
+      next.acCount = 'O número de CTN-C deve corresponder à quantidade de ACs.'
+    }
+
+    const seenCtnc = new Set<string>()
+    ctncNodeIds.forEach((id, index) => {
+      const trimmed = id.trim()
+      if (!trimmed) {
+        next.acCount = `CTN-C ${index + 1} não pode ficar vazio.`
+      } else if (!CTN_C_PATTERN.test(trimmed)) {
+        next.acCount = `CTN-C ${index + 1} deve seguir o padrão CTN-C-VX-XXX.`
+      } else if (seenCtnc.has(trimmed.toUpperCase())) {
+        next.acCount = `CTN-C duplicado: ${trimmed}`
+      } else {
+        seenCtnc.add(trimmed.toUpperCase())
+      }
+    })
 
     const min = parseFloat(idealTempMin)
     const max = parseFloat(idealTempMax)
@@ -72,34 +143,33 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
     return Object.keys(next).length === 0
   }
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!validate()) return
 
     setIsLoading(true)
 
     try {
-      // Build the room object — for new rooms the service assigns id/createdAt
-      // For edits we preserve existing id/createdAt
       const roomData: Room = {
         id: initialRoom?.id ?? '',
         userId,
-        clientId: initialRoom?.clientId ?? '', // Preserva clientId existente ou será definido pelo parent
+        clientId: initialRoom?.clientId ?? '',
         name: name.trim(),
         deviceId: deviceId.trim(),
         acCount: Math.max(1, parseInt(acCount) || 1),
-        location: location.trim() || undefined,
+        ctncNodeIds: ctncNodeIds.map((id) => id.trim()),
         idealTempMin: parseFloat(idealTempMin),
         idealTempMax: parseFloat(idealTempMax),
         createdAt: initialRoom?.createdAt ?? '',
       }
 
-      onSave(roomData)
+      await onSave(roomData)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar sala.'
-      // Surface deviceId duplicate error inline
-      if (msg.toLowerCase().includes('identificador')) {
+      if (msg.toLowerCase().includes('identificador') || msg.toLowerCase().includes('ctn-r')) {
         setErrors((prev) => ({ ...prev, deviceId: msg }))
+      } else if (msg.toLowerCase().includes('ctn-c')) {
+        setErrors((prev) => ({ ...prev, acCount: msg }))
       } else {
         setErrors((prev) => ({ ...prev, name: msg }))
       }
@@ -122,25 +192,15 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
       />
 
       <Input
-        label="Identificador do dispositivo (dev_id do CTN-R)"
+        label="Identificador do dispositivo (CTN-R)"
         id="room-device-id"
         name="room-device-id"
         value={deviceId}
-        onChange={(e) => setDeviceId(e.target.value)}
+        onChange={(e) => setDeviceId(formatNodeInput(e.target.value, 'CTNR'))}
         error={errors.deviceId}
         required
-        placeholder="Ex: CTN-R-V1-82427401"
-      />
-
-      <Input
-        label="Localização"
-        id="room-location"
-        name="room-location"
-        value={location}
-        onChange={(e) => setLocation(e.target.value)}
-        error={errors.location}
-        required
-        placeholder="Ex: 1º Andar"
+        disabled={isEditing}
+        placeholder="Ex: CTN-R-V1-000001"
       />
 
       <Input
@@ -149,11 +209,32 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
         name="room-ac-count"
         type="number"
         value={acCount}
-        onChange={(e) => setAcCount(e.target.value)}
+        onChange={(e) => handleAcCountChange(e.target.value)}
         error={errors.acCount}
-        placeholder="Ex: 2"
+        placeholder="Ex: 1"
         required
+        disabled={isEditing}
       />
+
+      <div className="rounded-2xl p-4 bg-slate-50 border border-slate-200 text-sm text-slate-600 space-y-3">
+        <p className="font-medium text-slate-800">IDs de nodes CTN-C</p>
+        {ctncNodeIds.map((id, index) => (
+          <Input
+            key={`ctnc-${index}`}
+            label={`AC - ${index + 1}`}
+            id={`room-ctnc-${index}`}
+            name={`room-ctnc-${index}`}
+            value={id}
+            onChange={(e) => {
+              const next = [...ctncNodeIds]
+              next[index] = formatNodeInput(e.target.value, 'CTNC')
+              setCtncNodeIds(next)
+            }}
+            placeholder="CTN-C-V1-001"
+            required
+          />
+        ))}
+      </div>
 
       <div className="grid grid-cols-2 gap-3">
         <Input

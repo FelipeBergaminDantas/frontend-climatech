@@ -1,11 +1,14 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
 import { useClientStatus } from '@/hooks/useClientStatus'
-import { getNodes } from '@/services/nodeService'
+import { addCtncNode, deleteNode, loadNodesForClient, updateNode } from '@/services/nodeService'
+import { verifyCurrentPassword } from '@/services/userService'
 import { getClientName } from '@/services/clientService'
+import { Button } from '@/components/ui/Button'
+import { PasswordConfirmModal } from '@/components/ui/PasswordConfirmModal'
 import type { ClimaTechNode, NodeStatus, NodeType } from '@/types'
 
 const TYPE_LABEL: Record<string, string> = { CTNR: 'CTN-R', CTNC: 'CTN-C' }
@@ -30,7 +33,7 @@ function formatLastSeen(iso: string): string {
 }
 
 // ── Node command modal ─────────────────────────────────────────────────────────
-function NodeCommandModal({ node, onClose }: { node: ClimaTechNode; onClose: () => void }) {
+function NodeCommandModal({ node, onClose, onUpdate, onDelete, isUpdating, isDeleting, actionError }: { node: ClimaTechNode; onClose: () => void; onUpdate: (node: ClimaTechNode, newNodeId?: string) => void; onDelete: (node: ClimaTechNode) => void; isUpdating: boolean; isDeleting: boolean; actionError: string }) {
   const cfg = STATUS_CONFIG[node.status]
   const isCTNR = node.type === 'CTNR'
 
@@ -39,6 +42,11 @@ function NodeCommandModal({ node, onClose }: { node: ClimaTechNode; onClose: () 
   const [learnCmd, setLearnCmd] = useState<CommandState>('idle')
   const [selectedIr, setSelectedIr] = useState<IrCommand>('power_on')
   const [learnResult, setLearnResult] = useState<string>('')
+  const [nodeIdInput, setNodeIdInput] = useState(node.id)
+
+  useEffect(() => {
+    setNodeIdInput(node.id)
+  }, [node.id])
 
   async function handleRequestStatus() {
     setStatusCmd('running')
@@ -176,6 +184,174 @@ function NodeCommandModal({ node, onClose }: { node: ClimaTechNode; onClose: () 
               Modo Aprendizagem IR disponível apenas para nodes CTN-C.
             </p>
           )}
+
+          <div className="rounded-xl p-4 space-y-3" style={{ background: '#f8fafc', border: '1px solid #e8edf5' }}>
+            <div>
+              <p className="text-sm font-semibold" style={{ color: '#0f2744' }}>
+                Editar node
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Altere o identificador do node. O ID do node é o nome visível do node.
+              </p>
+            </div>
+
+            <input
+              value={nodeIdInput}
+              onChange={(e) => setNodeIdInput(e.target.value.toUpperCase())}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+              placeholder={node.id}
+            />
+            {node.type === 'CTNC' && (
+              <p className="text-xs text-slate-400 mt-2">
+                AC - {node.acIndex ?? 1} · ID do CTN-C: <span className="font-mono">{node.id}</span>
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                loading={isUpdating}
+                onClick={() => onUpdate(node, nodeIdInput)}
+                disabled={nodeIdInput.trim().length === 0 || nodeIdInput.trim() === node.id}
+              >
+                {isUpdating ? 'Salvando...' : 'Salvar alterações'}
+              </Button>
+              {!isCTNR && (
+                <Button
+                  type="button"
+                  variant="danger"
+                  size="sm"
+                  loading={isDeleting}
+                  onClick={() => onDelete(node)}
+                >
+                  Excluir CTN-C
+                </Button>
+              )}
+            </div>
+            {actionError && (
+              <p className="text-xs text-red-600">{actionError}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CreateNodeModal({
+  isOpen,
+  onClose,
+  clientIds,
+  isOverviewMode,
+  selectClientId,
+  onSelectClient,
+  roomOptions,
+  selectedRoomId,
+  onSelectRoom,
+  nodeId,
+  onNodeIdChange,
+  onCreate,
+  isCreating,
+  creationError,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  clientIds: string[]
+  isOverviewMode: boolean
+  selectClientId: string
+  onSelectClient: (clientId: string) => void
+  roomOptions: { id: string; name: string }[]
+  selectedRoomId: string
+  onSelectRoom: (roomId: string) => void
+  nodeId: string
+  onNodeIdChange: (value: string) => void
+  onCreate: () => void
+  isCreating: boolean
+  creationError: string
+}) {
+  if (!isOpen) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid #e8edf5' }}>
+          <div>
+            <h2 className="text-lg font-semibold" style={{ color: '#0f2744' }}>Adicionar novo CTN-C</h2>
+            <p className="text-sm text-slate-500 mt-1">Crie um CTN-C vinculado a uma sala existente.</p>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors" aria-label="Fechar">
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="space-y-5 px-6 py-6">
+          {isOverviewMode && clientIds.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Cliente</label>
+              <select
+                value={selectClientId}
+                onChange={(e) => onSelectClient(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+              >
+                <option value="all">Todos os clientes</option>
+                {clientIds.map((id) => (
+                  <option key={id} value={id}>{getClientName(id)}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Sala</label>
+            <select
+              value={selectedRoomId}
+              onChange={(e) => onSelectRoom(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            >
+              <option value="all">Selecione uma sala</option>
+              {roomOptions.map((room) => (
+                <option key={room.id} value={room.id}>{room.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>ID do CTN-C</label>
+            <input
+              type="text"
+              value={nodeId}
+              onChange={(e) => onNodeIdChange(e.target.value)}
+              placeholder="CTN-C-V1-000001"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+
+          {creationError && (
+            <p className="text-xs text-red-600">{creationError}</p>
+          )}
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={isCreating || roomOptions.length === 0}
+              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isCreating ? 'Criando...' : 'Criar CTN-C'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -211,11 +387,14 @@ function NodeCard({ node, onSelect }: { node: ClimaTechNode; onSelect: (n: Clima
       </div>
 
       <div>
-        <p className="text-sm font-semibold" style={{ color: '#0f2744' }}>{node.roomName}</p>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Par: <span className="font-mono">{node.pairId}</span>
-          {node.acIndex !== undefined && <span className="ml-2">· AC #{node.acIndex}</span>}
+        <p className="text-sm font-semibold" style={{ color: '#0f2744' }}>
+          {node.id}
         </p>
+        {node.type === 'CTNC' && (
+          <p className="text-xs text-slate-400 mt-0.5">
+            AC - {node.acIndex ?? 1} · Sala: {node.roomName}
+          </p>
+        )}
       </div>
 
       <div className="flex items-center justify-between text-xs text-slate-400 pt-2 border-t border-slate-100">
@@ -230,9 +409,38 @@ function NodeCard({ node, onSelect }: { node: ClimaTechNode; onSelect: (n: Clima
 type FilterStatus = 'all' | NodeStatus
 type FilterType = 'all' | NodeType
 
+function formatCtncInput(raw: string) {
+  const prefix = 'CTN-C-V'
+  const value = raw.toUpperCase().replace(/\s+/g, '')
+  const stripped = value.startsWith(prefix)
+    ? value.slice(prefix.length)
+    : value.replace(/^CTN-C-?V?/i, '')
+
+  const normalized = stripped.replace(/[^0-9-]/g, '').replace(/^-+/, '')
+  if (!normalized) return prefix
+
+  const [versionPart, restPart] = normalized.split('-', 2)
+  const version = versionPart || ''
+  const rest = (restPart ?? '').replace(/[^0-9]/g, '')
+
+  if (restPart !== undefined) {
+    return `${prefix}${version}${rest ? `-${rest}` : '-'}`
+  }
+
+  if (version.length === 0) {
+    return prefix
+  }
+
+  if (version.length === 1) {
+    return `${prefix}${version}-`
+  }
+
+  return `${prefix}${version[0]}-${version.slice(1)}`
+}
+
 export default function NodesPage() {
-  const { user } = useAuth()
-  const { rooms } = useRooms()
+  const { user, isLoading: authLoading } = useAuth()
+  const { rooms, patchRoomLocally, isLoading: roomsLoading } = useRooms()
   const { canCreate } = useClientStatus()
   const isAdmin = user?.role === 'admin_master' || user?.role === 'admin_client'
   const isOverviewMode = user?.role === 'admin_master' && !user?.selectedClientId
@@ -242,22 +450,110 @@ export default function NodesPage() {
   const [filterRoom, setFilterRoom] = useState<string>('all')
   const [filterClient, setFilterClient] = useState<string>('all') // Novo filtro de cliente
   const [selectedNode, setSelectedNode] = useState<ClimaTechNode | null>(null)
+  const [newNodeId, setNewNodeId] = useState('CTN-C-V')
+  const [createRoomId, setCreateRoomId] = useState<string>('all')
+  const [createClientId, setCreateClientId] = useState<string>('all')
+  const [creationError, setCreationError] = useState<string>('')
+  const [actionError, setActionError] = useState<string>('')
+  const [nodes, setNodes] = useState<ClimaTechNode[]>([])
+  const [isLoadingNodes, setIsLoadingNodes] = useState(true)
+  const [isCreatingNode, setIsCreatingNode] = useState(false)
+  const [isUpdatingNode, setIsUpdatingNode] = useState(false)
+  const [isDeletingNode, setIsDeletingNode] = useState(false)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [pendingNodeAction, setPendingNodeAction] = useState<{
+    type: 'update' | 'delete'
+    node: ClimaTechNode
+    newNodeId?: string
+  } | null>(null)
 
-  const allNodes = useMemo(() => {
-    // Filtra nodes apenas das salas do cliente atual
-    const roomIds = rooms.map(r => r.id)
-    return getNodes().filter(node => roomIds.includes(node.roomId))
-  }, [rooms])
-
-  // Filtrar salas por cliente no modo overview
-  const filteredRooms = isOverviewMode && filterClient !== 'all'
-    ? rooms.filter(r => r.clientId === filterClient)
-    : rooms
+  const roomIds = rooms.map((r) => r.id)
+  const allNodes = nodes.filter((node) => roomIds.includes(node.roomId))
 
   // Obter lista única de clientIds
   const clientIds = useMemo(() => {
-    return Array.from(new Set(rooms.map(r => r.clientId)))
+    return Array.from(new Set(rooms.map((r) => r.clientId)))
   }, [rooms])
+
+  // Filtrar salas por cliente no modo overview
+  const filteredRooms = useMemo(() => {
+    if (isOverviewMode && filterClient !== 'all') {
+      return rooms.filter((r) => r.clientId === filterClient)
+    }
+    return rooms
+  }, [rooms, isOverviewMode, filterClient])
+
+  const currentClientId = isOverviewMode
+    ? ''
+    : (user?.selectedClientId ?? user?.clientId ?? '')
+
+  const clientIdsToLoad = useMemo(() => {
+    if (!isOverviewMode) {
+      return currentClientId ? [currentClientId] : []
+    }
+
+    if (filterClient !== 'all') {
+      return [filterClient]
+    }
+
+    return clientIds
+  }, [isOverviewMode, filterClient, clientIds, currentClientId])
+
+  const createRoomOptions = useMemo(() => {
+    if (!isOverviewMode) {
+      return rooms.filter((r) => r.clientId === currentClientId)
+    }
+    if (createClientId !== 'all') {
+      return rooms.filter((r) => r.clientId === createClientId)
+    }
+    return rooms
+  }, [rooms, isOverviewMode, currentClientId, createClientId])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function load() {
+      const allAvailableRooms = rooms
+      console.log('[nodesPage] Loading nodes:', { clientIdsToLoad, allAvailableRooms: allAvailableRooms.length })
+      setIsLoadingNodes(true)
+      if (allAvailableRooms.length === 0 || clientIdsToLoad.length === 0) {
+        console.log('[nodesPage] Skipping load: no rooms or clients')
+        if (mounted) setNodes([])
+        setIsLoadingNodes(false)
+        return
+      }
+
+      try {
+        console.log('[nodesPage] Starting to load nodes for clients:', clientIdsToLoad)
+        const loadedPerClient = await Promise.all(
+          clientIdsToLoad.map((clientId) => {
+            const roomsForClient = allAvailableRooms.filter((room) => room.clientId === clientId)
+            console.log(`[nodesPage] Loading nodes for client ${clientId}:`, { roomCount: roomsForClient.length })
+            return loadNodesForClient(clientId, roomsForClient)
+          })
+        )
+
+        console.log('[nodesPage] Nodes loaded:', loadedPerClient.flat().length)
+        if (mounted) {
+          setNodes(loadedPerClient.flat())
+        }
+      } catch (error) {
+        console.error('[nodesPage] Failed to load nodes:', error)
+        if (mounted) setNodes([])
+      } finally {
+        if (mounted) setIsLoadingNodes(false)
+      }
+    }
+
+    load()
+    return () => {
+      mounted = false
+    }
+  }, [rooms, clientIdsToLoad])
+
+  const selectedRoomId = createRoomId !== 'all' && createRoomOptions.some((room) => room.id === createRoomId)
+    ? createRoomId
+    : createRoomOptions[0]?.id ?? 'all'
 
   const filtered = useMemo(() => allNodes.filter(n => {
     if (filterStatus !== 'all' && n.status !== filterStatus) return false
@@ -271,8 +567,158 @@ export default function NodesPage() {
     return true
   }), [allNodes, filterStatus, filterType, filterRoom, filterClient, isOverviewMode, rooms])
 
-  const online  = allNodes.filter(n => n.status === 'online').length
-  const offline = allNodes.filter(n => n.status === 'offline').length
+  async function handleCreateCtncNode() {
+    console.log('[nodesPage] handleCreateCtncNode start')
+    setCreationError('')
+const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?.id
+    console.log('[nodesPage] Selected room ID:', { roomId, selectedRoomId })
+    
+    if (!roomId) {
+      const msg = 'Selecione uma sala válida para adicionar o CTN-C.'
+      console.error('[nodesPage] Error:', msg)
+      setCreationError(msg)
+      return
+    }
+
+    const room = rooms.find((r) => r.id === roomId)
+    if (!room) {
+      const msg = 'Sala selecionada não encontrada.'
+      console.error('[nodesPage] Error:', msg, { roomId, roomIds: rooms.map(r => r.id) })
+      setCreationError(msg)
+      setIsCreatingNode(false)
+      return
+    }
+
+    if (!newNodeId.trim() || newNodeId === 'CTN-C-V') {
+      const msg = 'Informe um ID de CTN-C válido.'
+      console.error('[nodesPage] Error:', msg, { newNodeId })
+      setCreationError(msg)
+      return
+    }
+
+    setIsCreatingNode(true)
+    try {
+      console.log('[nodesPage] Creating node:', { roomId, roomName: room.name, nodeId: newNodeId })
+      const node = await addCtncNode(roomId, room.name, newNodeId)
+      console.log('[nodesPage] Node created:', node)
+      
+      patchRoomLocally(roomId, {
+        acCount: room.acCount + 1,
+        ctncNodeIds: [...(room.ctncNodeIds ?? []), node.id],
+      })
+      setNodes((prev) => [...prev, node])
+      setNewNodeId('CTN-C-V')
+      setShowCreateModal(false)
+      setCreationError('')
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro ao adicionar o node.'
+      console.error('[nodesPage] Error creating node:', error, msg)
+      setCreationError(msg)
+    } finally {
+      setIsCreatingNode(false)
+    }
+  }
+
+  async function handleUpdateNode(node: ClimaTechNode, newNodeId: string) {
+    setActionError('')
+    setIsUpdatingNode(true)
+
+    try {
+      const updated = await updateNode(node.id, node.roomName, { node_id: newNodeId.trim().toUpperCase() })
+      setNodes((prev) => prev.map((current) => (current.id === node.id ? updated : current)))
+
+      const room = rooms.find((r) => r.id === node.roomId)
+      if (room) {
+        if (node.type === 'CTNR') {
+          patchRoomLocally(node.roomId, { deviceId: updated.id })
+        }
+
+        if (node.type === 'CTNC') {
+          patchRoomLocally(node.roomId, {
+            ctncNodeIds: (room.ctncNodeIds ?? []).map((id) => (id === node.id ? updated.id : id)),
+          })
+        }
+      }
+
+      setSelectedNode(updated)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro ao atualizar o node.'
+      console.error('[nodesPage] Error updating node:', error, msg)
+      setActionError(msg)
+    } finally {
+      setIsUpdatingNode(false)
+    }
+  }
+
+  async function handleDeleteNode(node: ClimaTechNode) {
+    setActionError('')
+    setIsDeletingNode(true)
+
+    try {
+      await deleteNode(node.id)
+      setNodes((prev) => prev.filter((n) => n.id !== node.id))
+      const room = rooms.find((r) => r.id === node.roomId)
+      if (room) {
+        patchRoomLocally(node.roomId, {
+          acCount: Math.max(0, room.acCount - 1),
+          ctncNodeIds: (room.ctncNodeIds ?? []).filter((id) => id !== node.id),
+        })
+      }
+      setSelectedNode(null)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Erro ao excluir o node.'
+      console.error('[nodesPage] Error deleting node:', error, msg)
+      setActionError(msg)
+    } finally {
+      setIsDeletingNode(false)
+    }
+  }
+
+  function requestNodeUpdate(node: ClimaTechNode, newNodeId?: string) {
+    setPendingNodeAction({ type: 'update', node, newNodeId })
+  }
+
+  function requestNodeDelete(node: ClimaTechNode) {
+    setPendingNodeAction({ type: 'delete', node })
+  }
+
+  async function confirmPendingNodeAction(password: string) {
+    if (!pendingNodeAction) return
+    await verifyCurrentPassword(password)
+
+    if (pendingNodeAction.type === 'update' && pendingNodeAction.newNodeId) {
+      await handleUpdateNode(pendingNodeAction.node, pendingNodeAction.newNodeId)
+    }
+
+    if (pendingNodeAction.type === 'delete') {
+      await handleDeleteNode(pendingNodeAction.node)
+    }
+
+    setPendingNodeAction(null)
+  }
+
+  const online = allNodes.filter((n) => n.status === 'online').length
+  const offline = allNodes.filter((n) => n.status === 'offline').length
+
+  if (authLoading || roomsLoading) {
+    return (
+      <main className="min-h-screen px-4 sm:px-6 py-6 sm:py-8 pb-16 bg-white">
+        <div className="max-w-6xl mx-auto py-12">
+          <p className="text-sm text-slate-500">Carregando salas...</p>
+        </div>
+      </main>
+    )
+  }
+
+  if (isLoadingNodes) {
+    return (
+      <main className="min-h-screen px-4 sm:px-6 py-6 sm:py-8 pb-16 bg-white">
+        <div className="max-w-6xl mx-auto py-12">
+          <p className="text-sm text-slate-500">Carregando nodes...</p>
+        </div>
+      </main>
+    )
+  }
 
   if (!isAdmin) {
     return (
@@ -295,14 +741,52 @@ export default function NodesPage() {
 
   return (
     <main className="min-h-screen px-4 sm:px-6 py-6 sm:py-8 pb-16 bg-white">
-      {selectedNode && <NodeCommandModal node={selectedNode} onClose={() => setSelectedNode(null)} />}
+      {selectedNode && (
+        <NodeCommandModal
+          node={selectedNode}
+          onClose={() => setSelectedNode(null)}
+          onUpdate={requestNodeUpdate}
+          onDelete={requestNodeDelete}
+          isUpdating={isUpdatingNode}
+          isDeleting={isDeletingNode}
+          actionError={actionError}
+        />
+      )}
+
+      {pendingNodeAction && (
+        <PasswordConfirmModal
+          title={pendingNodeAction.type === 'delete'
+            ? 'Confirmar exclusão de CTN-C'
+            : 'Confirmar atualização de CTN-C'}
+          message={pendingNodeAction.type === 'delete'
+            ? 'Digite sua senha para confirmar a exclusão permanente deste CTN-C.'
+            : 'Digite sua senha para confirmar a alteração do identificador do CTN-C.'}
+          onConfirm={confirmPendingNodeAction}
+          onClose={() => setPendingNodeAction(null)}
+          confirmButtonText={pendingNodeAction.type === 'delete' ? 'Excluir' : 'Confirmar'}
+          isDangerous={pendingNodeAction.type === 'delete'}
+        />
+      )}
 
       <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: '#0f2744' }}>
-            {isOverviewMode ? 'Nodes - Visão Geral' : 'Nodes'}
-          </h1>
-          <p className="text-sm text-slate-500 mt-0.5">Clique em um node para enviar comandos</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: '#0f2744' }}>
+              {isOverviewMode ? 'Nodes - Visão Geral' : 'Nodes'}
+            </h1>
+            <p className="text-sm text-slate-500 mt-0.5">Clique em um node para enviar comandos</p>
+          </div>
+          <div>
+            <Button
+              type="button"
+              variant="primary"
+              size="md"
+              onClick={() => setShowCreateModal(true)}
+              disabled={!canCreate || createRoomOptions.length === 0}
+            >
+              + Nova CTN-C
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -333,17 +817,36 @@ export default function NodesPage() {
           </div>
         )}
 
+        {showCreateModal && (
+          <CreateNodeModal
+            isOpen={showCreateModal}
+            onClose={() => setShowCreateModal(false)}
+            clientIds={clientIds}
+            isOverviewMode={isOverviewMode}
+            selectClientId={createClientId}
+            onSelectClient={(value) => setCreateClientId(value)}
+            roomOptions={createRoomOptions}
+            selectedRoomId={selectedRoomId}
+            onSelectRoom={(value) => setCreateRoomId(value)}
+            nodeId={newNodeId}
+            onNodeIdChange={(value) => setNewNodeId(formatCtncInput(value))}
+            onCreate={handleCreateCtncNode}
+            isCreating={isCreatingNode}
+            creationError={creationError}
+          />
+        )}
+
         <div className="flex flex-wrap gap-2">
           {/* Filtro de cliente (apenas no modo overview) */}
           {isOverviewMode && clientIds.length > 0 && (
             <select
               value={filterClient}
-              onChange={e => setFilterClient(e.target.value)}
+              onChange={(e) => setFilterClient(e.target.value)}
               className="px-3 py-1.5 rounded-xl text-xs outline-none"
               style={{ background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}
             >
               <option value="all">Todos os clientes</option>
-              {clientIds.map(clientId => (
+              {clientIds.map((clientId) => (
                 <option key={clientId} value={clientId}>
                   {getClientName(clientId)}
                 </option>
@@ -352,107 +855,69 @@ export default function NodesPage() {
           )}
           
           <div className="flex flex-wrap gap-1.5">
-            {(['all', 'online', 'offline'] as const).map(s => (
-              <button key={s} onClick={() => setFilterStatus(s)}
+            {(['all', 'online', 'offline'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilterStatus(s)}
                 className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
                 style={filterStatus === s
                   ? { background: 'linear-gradient(135deg, #1e5fa8, #2d7dd2)', color: 'white' }
-                  : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                  : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}
+              >
                 {s === 'all' ? 'Todos' : s === 'online' ? 'Online' : 'Offline'}
               </button>
             ))}
           </div>
           <div className="flex flex-wrap gap-1.5">
-            {(['all', 'CTNR', 'CTNC'] as FilterType[]).map(t => (
-              <button key={t} onClick={() => setFilterType(t)}
+            {(['all', 'CTNR', 'CTNC'] as FilterType[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setFilterType(t)}
                 className="px-3 py-1.5 rounded-xl text-xs font-medium transition-all"
                 style={filterType === t
                   ? { background: 'linear-gradient(135deg, #0ea5a0, #10c98f)', color: 'white' }
-                  : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}>
+                  : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}
+              >
                 {t === 'all' ? 'Todos os tipos' : TYPE_LABEL[t]}
               </button>
             ))}
           </div>
-          <select value={filterRoom} onChange={e => setFilterRoom(e.target.value)}
+          <select
+            value={filterRoom}
+            onChange={(e) => setFilterRoom(e.target.value)}
             className="px-3 py-1.5 rounded-xl text-xs outline-none"
-            style={{ background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}>
+            style={{ background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}
+          >
             <option value="all">Todas as salas</option>
-            {filteredRooms.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            {filteredRooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
           </select>
         </div>
 
-        {isOverviewMode && filterClient === 'all' ? (
-          // Modo overview: agrupar por cliente
-          <>
-            {clientIds.map(clientId => {
-              const clientRooms = rooms.filter(r => r.clientId === clientId)
-              const clientRoomIds = clientRooms.map(r => r.id)
-              const clientNodes = filtered.filter(n => clientRoomIds.includes(n.roomId))
-              
-              if (clientNodes.length === 0) return null
-              
-              const clientOnline = clientNodes.filter(n => n.status === 'online').length
-              
-              return (
-                <div key={clientId} className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-semibold" style={{ color: '#1e5fa8' }}>
-                      {getClientName(clientId)}
-                    </h2>
-                    <span className="text-xs text-slate-400">
-                      {clientOnline} de {clientNodes.length} online
-                    </span>
-                  </div>
-                  
-                  {clientRooms.map(room => {
-                    const roomNodes = clientNodes.filter(n => n.roomId === room.id)
-                    if (roomNodes.length === 0) return null
-                    return (
-                      <div key={room.id}>
-                        <div className="flex items-center gap-3 mb-3">
-                          <h3 className="text-sm font-semibold" style={{ color: '#0f2744' }}>{room.name}</h3>
-                          <span className="text-xs text-slate-400">{room.location}</span>
-                          <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f0f4f8', color: '#64748b' }}>
-                            {roomNodes.length} node{roomNodes.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                          {roomNodes.map(node => (
-                            <NodeCard key={node.id} node={node} onSelect={setSelectedNode} />
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </>
-        ) : (
-          // Modo normal ou filtrado: lista simples
-          <>
-            {filteredRooms.map(room => {
-              const roomNodes = filtered.filter(n => n.roomId === room.id)
-              if (roomNodes.length === 0) return null
-              return (
-                <div key={room.id}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <h2 className="text-sm font-semibold" style={{ color: '#0f2744' }}>{room.name}</h2>
-                    <span className="text-xs text-slate-400">{room.location}</span>
-                    <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f0f4f8', color: '#64748b' }}>
-                      {roomNodes.length} node{roomNodes.length !== 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {roomNodes.map(node => (
-                      <NodeCard key={node.id} node={node} onSelect={setSelectedNode} />
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
-          </>
-        )}
+
+        {filteredRooms.map(room => {
+          const roomNodes = filtered.filter(n => n.roomId === room.id)
+          if (roomNodes.length === 0) return null
+          return (
+            <div key={room.id}>
+              <div className="flex items-center gap-3 mb-3">
+                <h2 className="text-sm font-semibold" style={{ color: '#0f2744' }}>{room.name}</h2>
+                <span className="text-xs text-slate-400">{room.location}</span>
+                <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: '#f0f4f8', color: '#64748b' }}>
+                  {roomNodes.length} node{roomNodes.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {roomNodes.map(node => (
+                  <NodeCard key={node.id} node={node} onSelect={setSelectedNode} />
+                ))}
+              </div>
+            </div>
+          )
+        })}
 
         {filtered.length === 0 && (
           <p className="text-sm text-slate-400 text-center py-12">Nenhum node encontrado com os filtros selecionados.</p>

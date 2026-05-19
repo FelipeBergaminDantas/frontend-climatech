@@ -8,18 +8,25 @@ import { RoomList } from '@/components/rooms/RoomList'
 import { RoomForm } from '@/components/rooms/RoomForm'
 import { DeleteRoomModal } from '@/components/rooms/DeleteRoomModal'
 import { Modal } from '@/components/ui/Modal'
+import { PasswordConfirmModal } from '@/components/ui/PasswordConfirmModal'
 import { getClientName } from '@/services/clientService'
+import { verifyCurrentPassword } from '@/services/userService'
 import { useClientStatus } from '@/hooks/useClientStatus'
 import type { Room } from '@/types'
 
 export default function RoomsPage() {
   const router = useRouter()
   const { isAuthenticated, isLoading: authLoading, user } = useAuth()
-  const { rooms, deviceStates, deleteRoom, updateRoom } = useRooms()
+  const { rooms, deviceStates, deleteRoom, updateRoom, isLoading: roomsLoading } = useRooms()
   const { isClientActive, canCreate } = useClientStatus()
 
   const [pendingDelete, setPendingDelete] = useState<Room | null>(null)
   const [editingRoom, setEditingRoom] = useState<Room | null>(null)
+  const [roomActionPayload, setRoomActionPayload] = useState<{
+    type: 'edit' | 'delete'
+    room: Room
+    draft?: Room
+  } | null>(null)
   const [filterClient, setFilterClient] = useState<string>('all')
 
   const isAdmin = user?.role === 'admin_master' || user?.role === 'admin_client'
@@ -51,17 +58,54 @@ export default function RoomsPage() {
 
   if (!isAuthenticated && !authLoading) return null
 
-  function handleEditSave(roomData: Room) {
-    if (!editingRoom) return
-    updateRoom(editingRoom.id, {
-      name: roomData.name, deviceId: roomData.deviceId,
-      location: roomData.location, idealTempMin: roomData.idealTempMin, idealTempMax: roomData.idealTempMax,
-    })
-    setEditingRoom(null)
+  if (authLoading || roomsLoading) {
+    return (
+      <main className="min-h-screen px-4 sm:px-6 py-6 sm:py-8 pb-16 bg-white">
+        <div className="max-w-4xl mx-auto py-12">
+          <p className="text-sm text-slate-500">Carregando salas...</p>
+        </div>
+      </main>
+    )
   }
 
-  function handleDeleteConfirm() {
-    if (pendingDelete) { deleteRoom(pendingDelete.id); setPendingDelete(null) }
+  async function handleEditSave(roomData: Room) {
+    if (!editingRoom) return
+    setRoomActionPayload({ type: 'edit', room: editingRoom, draft: roomData })
+  }
+
+  async function handleDeleteConfirm() {
+    if (!pendingDelete) return
+    setRoomActionPayload({ type: 'delete', room: pendingDelete })
+    setPendingDelete(null)
+  }
+
+  async function confirmRoomAction(password: string) {
+    if (!roomActionPayload) return
+
+    await verifyCurrentPassword(password)
+
+    try {
+      if (roomActionPayload.type === 'edit' && roomActionPayload.draft) {
+        const roomData = roomActionPayload.draft
+        await updateRoom(roomActionPayload.room.id, {
+          name: roomData.name,
+          deviceId: roomData.deviceId,
+          location: roomData.location,
+          idealTempMin: roomData.idealTempMin,
+          idealTempMax: roomData.idealTempMax,
+        })
+        setEditingRoom(null)
+      }
+
+      if (roomActionPayload.type === 'delete') {
+        await deleteRoom(roomActionPayload.room.id)
+      }
+    } catch (error) {
+      console.error('Falha na ação da sala:', error)
+      throw error instanceof Error ? error : new Error('Falha ao confirmar a ação. Tente novamente.')
+    } finally {
+      setRoomActionPayload(null)
+    }
   }
 
   return (
@@ -182,6 +226,19 @@ export default function RoomsPage() {
             roomName={pendingDelete.name}
             onConfirm={handleDeleteConfirm}
             onCancel={() => setPendingDelete(null)}
+          />
+        )}
+
+        {roomActionPayload && (
+          <PasswordConfirmModal
+            title={roomActionPayload.type === 'delete' ? 'Confirmar exclusão de sala' : 'Confirmar edição de sala'}
+            message={roomActionPayload.type === 'delete'
+              ? `Digite sua senha para confirmar a exclusão permanente da sala "${roomActionPayload.room.name}".`
+              : `Digite sua senha para confirmar as alterações da sala "${roomActionPayload.room.name}".`}
+            onConfirm={confirmRoomAction}
+            onClose={() => setRoomActionPayload(null)}
+            confirmButtonText={roomActionPayload.type === 'delete' ? 'Excluir' : 'Salvar'}
+            isDangerous={roomActionPayload.type === 'delete'}
           />
         )}
       </div>

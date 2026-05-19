@@ -171,7 +171,7 @@ export default function SelectClientPage() {
           {/* Ver Todos os Clientes - Sempre no topo */}
           <button
             onClick={handleViewAllClients}
-            className="w-full px-6 py-5 text-left transition-all hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 active:bg-slate-100 flex items-center justify-between group border-b-2 border-purple-200"
+            className="w-full px-6 py-5 text-left transition-all hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 active:bg-slate-100 flex items-center justify-between gap-4 group border-b-2 border-purple-200"
           >
             <div className="flex items-center gap-4 flex-1">
               <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 text-white font-bold text-lg shrink-0">
@@ -217,10 +217,10 @@ export default function SelectClientPage() {
               {activeClients.map((client) => (
                 <div
                   key={client.id}
-                  className="w-full px-6 py-5 transition-all hover:bg-slate-50 active:bg-slate-100 flex items-center justify-between group cursor-pointer"
+                  className="w-full px-6 py-5 transition-all hover:bg-slate-50 active:bg-slate-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between group cursor-pointer"
                   onClick={() => handleSelectClient(client.id)}
                 >
-                  <div className="flex items-center gap-4 flex-1">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-[#1e5fa8] to-[#0ea5a0] text-white font-bold text-lg shrink-0">
                       {client.name.charAt(0)}
                     </div>
@@ -237,11 +237,11 @@ export default function SelectClientPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       onClick={(e) => handleToggleStatus(e, client.id)}
                       disabled={isActionLoading}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}
                       title="Desativar cliente"
                     >
@@ -250,7 +250,7 @@ export default function SelectClientPage() {
                     <button
                       onClick={(e) => handleEditClick(e, client.id)}
                       disabled={isActionLoading}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ background: 'rgba(59,130,246,0.1)', color: '#2563eb' }}
                       title="Editar cliente"
                     >
@@ -259,7 +259,7 @@ export default function SelectClientPage() {
                     <button
                       onClick={(e) => handleDeleteClick(e, client.id)}
                       disabled={isActionLoading}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ background: 'rgba(248,113,113,0.12)', color: '#dc2626' }}
                       title="Excluir cliente"
                     >
@@ -303,10 +303,10 @@ export default function SelectClientPage() {
               {clients.filter(c => !c.isActive).map(client => (
                 <div
                   key={client.id}
-                  className="w-full px-6 py-5 transition-all hover:bg-slate-50 active:bg-slate-100 flex items-center justify-between group cursor-pointer"
+                  className="w-full px-6 py-5 transition-all hover:bg-slate-50 active:bg-slate-100 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between group cursor-pointer"
                   onClick={() => handleSelectClient(client.id)}
                 >
-                  <div className="flex items-center gap-4 flex-1">
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
                     <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-slate-400 to-slate-500 text-white font-bold text-lg shrink-0">
                       {client.name.charAt(0)}
                     </div>
@@ -324,10 +324,10 @@ export default function SelectClientPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center justify-end gap-2">
                     <button
                       onClick={(e) => handleToggleStatus(e, client.id)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all hover:shadow-md"
                       style={{ background: 'rgba(16,201,143,0.1)', color: '#10c98f' }}
                       title="Reativar cliente"
                     >
@@ -335,7 +335,7 @@ export default function SelectClientPage() {
                     </button>
                     <button
                       onClick={(e) => handleEditClick(e, client.id)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all hover:shadow-md"
                       style={{ background: 'rgba(59,130,246,0.1)', color: '#2563eb' }}
                       title="Editar cliente"
                     >
@@ -343,7 +343,7 @@ export default function SelectClientPage() {
                     </button>
                     <button
                       onClick={(e) => handleDeleteClick(e, client.id)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:shadow-md"
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all hover:shadow-md"
                       style={{ background: 'rgba(248,113,113,0.12)', color: '#dc2626' }}
                       title="Excluir cliente"
                     >

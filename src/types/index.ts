@@ -28,10 +28,25 @@ export interface Room {
   name: string;
   deviceId: string;
   acCount: number;
+  ctncNodeIds?: string[];
   location?: string;
   idealTempMin: number;
   idealTempMax: number;
   createdAt: string;
+}
+
+export interface Ac {
+  id: string;
+  clientId: string;
+  salaId: string;
+  salaName?: string;
+  nodeId: string;
+  nomeAc: string;
+  nodeStatus?: string;
+  nodeType?: string;
+  nodeLastSeen?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface DeviceState {

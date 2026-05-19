@@ -1,11 +1,11 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
 import { RoomForm } from '@/components/rooms/RoomForm'
-import { getAllClients, getClientName } from '@/services/clientService'
+import { getAllClients } from '@/services/clientService'
 import type { Room, Client } from '@/types'
 import { OWNER_ID } from '@/config/constants'
 
@@ -39,28 +39,32 @@ export default function NewRoomPage() {
 
   const userId = user?.id ?? OWNER_ID
 
-  function handleSave(roomData: Room) {
-    // Usa o clientId selecionado (do filtro ou do usuário)
-    const clientId = isAllClientsView ? selectedClientId : (user?.role === 'admin_master' 
-      ? user.selectedClientId || '' 
+  async function handleSave(roomData: Room) {
+    const clientId = isAllClientsView ? selectedClientId : (user?.role === 'admin_master'
+      ? user.selectedClientId || ''
       : user?.clientId || '')
-    
+
     if (!clientId) {
       alert('Por favor, selecione um cliente antes de criar a sala.')
       return
     }
-    
-    addRoom({
-      userId,
-      clientId,
-      name: roomData.name,
-      deviceId: roomData.deviceId,
-      acCount: roomData.acCount,
-      location: roomData.location,
-      idealTempMin: roomData.idealTempMin,
-      idealTempMax: roomData.idealTempMax,
-    })
-    router.replace('/rooms')
+
+    try {
+      await addRoom({
+        userId,
+        clientId,
+        name: roomData.name,
+        deviceId: roomData.deviceId,
+        acCount: roomData.acCount,
+        location: roomData.location,
+        idealTempMin: roomData.idealTempMin,
+        idealTempMax: roomData.idealTempMax,
+      })
+      router.replace('/rooms')
+    } catch (error) {
+      console.error('Failed to create room:', error)
+      alert('Falha ao criar sala. Verifique os dados e tente novamente.')
+    }
   }
 
   return (

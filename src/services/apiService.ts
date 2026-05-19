@@ -1,3 +1,5 @@
+import { ACCESS_TOKEN_KEY } from '@/config/constants'
+
 /**
  * API Service - Backend Integration
  * Connects frontend to ClimaTech FastAPI backend
@@ -43,13 +45,104 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export interface SalaCreateRequest {
+  client_id: string;
+  nome_sala: string;
+  temp_ideal_min: number;
+  temp_ideal_max: number;
+  ctnr_node_id: string;
+  ctnc_nodes: string[];
+}
+
+export interface SalaUpdateRequest {
+  nome_sala?: string;
+  temp_ideal_min?: number;
+  temp_ideal_max?: number;
+}
+
+export interface SalaResponse {
+  id: string;
+  client_id: string;
+  nome_sala: string;
+  ctnr_node_id: string;
+  qtd_ac: number;
+  temp_ideal_min: number;
+  temp_ideal_max: number;
+  dth_criacao_at: string;
+  dth_atualizacao_at?: string;
+}
+
+export interface NodeResponse {
+  node_id: string;
+  client_id: string;
+  sala_id: string;
+  node_type: 'CTN-R' | 'CTN-C';
+  ultimo_status: string;
+  dth_ultimo_status_at?: string;
+  dth_criacao_at?: string;
+  dth_updated_at?: string;
+}
+
+export interface NodeCreateRequest {
+  node_id: string;
+}
+
+export interface NodeUpdateRequest {
+  node_id?: string;
+  ultimo_status?: string;
+}
+
+export interface SalaDetailResponse extends SalaResponse {
+  nodes?: unknown[];
+}
+
+export interface AcResponse {
+  id: string;
+  client_id: string;
+  sala_id: string;
+  sala_name?: string;
+  node_id: string;
+  nome_ac: string;
+  node_status?: string;
+  node_type?: string;
+  node_last_seen?: string;
+  dth_criacao_at?: string;
+  dth_updated_at?: string;
+}
+
+export interface AcUpdateRequest {
+  nome_ac: string;
+}
+
+function getAccessToken(): string | null {
+  if (typeof window === 'undefined') {
+    return null
+  }
+  return localStorage.getItem(ACCESS_TOKEN_KEY) ?? sessionStorage.getItem(ACCESS_TOKEN_KEY)
+}
+
+function buildHeaders(contentType = true): Record<string, string> {
+  const headers: Record<string, string> = {}
+  if (contentType) {
+    headers['Content-Type'] = 'application/json'
+  }
+  const token = getAccessToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  return headers
+}
+
 /**
  * Get all clientes from backend
  */
 export async function getClientesFromBackend(onlyActive = true): Promise<ClienteResponse[]> {
   try {
     const queryString = new URLSearchParams({ only_active: String(onlyActive) });
-    const response = await fetch(`${API_BASE_URL}/clientes?${queryString}`);
+    const response = await fetch(`${API_BASE_URL}/clientes?${queryString}`, {
+      method: 'GET',
+      headers: buildHeaders(false),
+    });
     if (!response.ok) throw new Error('Failed to fetch clientes');
     const result: ApiResponse<ClienteResponse[]> = await response.json();
     return result.data;
@@ -64,7 +157,10 @@ export async function getClientesFromBackend(onlyActive = true): Promise<Cliente
  */
 export async function getClienteById(id: string): Promise<ClienteResponse | null> {
   try {
-    const response = await fetch(`${API_BASE_URL}/clientes/${id}`);
+    const response = await fetch(`${API_BASE_URL}/clientes/${id}`, {
+      method: 'GET',
+      headers: buildHeaders(false),
+    });
     if (!response.ok) throw new Error('Failed to fetch cliente');
     const result: ApiResponse<ClienteResponse> = await response.json();
     return result.data;
@@ -81,10 +177,9 @@ export async function createClienteInBackend(data: ClienteCreate): Promise<Clien
   try {
     const response = await fetch(`${API_BASE_URL}/clientes`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(),
       body: JSON.stringify(data),
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -107,9 +202,8 @@ export async function updateClienteInBackend(id: string, data: Partial<ClienteCr
   try {
     const response = await fetch(`${API_BASE_URL}/clientes/${id}`, {
       method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(),
+      credentials: 'include',
       body: JSON.stringify(data),
     });
     
@@ -129,9 +223,8 @@ export async function deactivateClienteInBackend(id: string): Promise<ClienteRes
   try {
     const response = await fetch(`${API_BASE_URL}/clientes/${id}/deactivate`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(),
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -154,9 +247,8 @@ export async function activateClienteInBackend(id: string): Promise<ClienteRespo
   try {
     const response = await fetch(`${API_BASE_URL}/clientes/${id}/activate`, {
       method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -179,9 +271,8 @@ export async function deleteClienteInBackend(id: string): Promise<boolean> {
   try {
     const response = await fetch(`${API_BASE_URL}/clientes/${id}`, {
       method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: buildHeaders(),
+      credentials: 'include',
     });
 
     if (!response.ok) {
@@ -194,4 +285,291 @@ export async function deleteClienteInBackend(id: string): Promise<boolean> {
     console.error('Error deleting cliente:', error);
     throw error;
   }
+}
+
+/**
+ * Get salas for a given client from backend
+ */
+export async function getSalasFromBackend(clientId: string): Promise<SalaResponse[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/salas/clientes/${clientId}`, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || 'Failed to load salas')
+    }
+
+    const result: ApiResponse<SalaResponse[]> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('Error fetching salas:', error)
+    return []
+  }
+}
+
+/**
+ * Get sala by ID from backend
+ */
+export async function getSalaByIdFromBackend(id: string): Promise<SalaDetailResponse | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/salas/${id}`, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || 'Failed to fetch sala')
+    }
+
+    const result: ApiResponse<SalaDetailResponse> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('Error fetching sala by id:', error)
+    return null
+  }
+}
+
+/**
+ * Fetch ACs from backend
+ */
+export async function getAcsFromBackend(clientId?: string): Promise<AcResponse[]> {
+  try {
+    const url = new URL(`${API_BASE_URL}/acs`)
+    if (clientId) {
+      url.searchParams.append('client_id', clientId)
+    }
+
+    const response = await fetch(url.toString(), {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || 'Failed to load ACs')
+    }
+
+    const result: ApiResponse<AcResponse[]> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('Error fetching ACs:', error)
+    return []
+  }
+}
+
+/**
+ * Get ACs by sala id from backend
+ */
+export async function getAcsBySalaFromBackend(salaId: string): Promise<AcResponse[]> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/salas/${salaId}/acs`, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || 'Failed to load sala ACs')
+    }
+
+    const result: ApiResponse<AcResponse[]> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('Error fetching sala ACs:', error)
+    return []
+  }
+}
+
+/**
+ * Update AC in backend
+ */
+export async function updateAcInBackend(id: string, data: AcUpdateRequest): Promise<AcResponse> {
+  const response = await fetch(`${API_BASE_URL}/acs/${id}`, {
+    method: 'PATCH',
+    headers: buildHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to update AC')
+  }
+
+  const result: ApiResponse<AcResponse> = await response.json()
+  return result.data
+}
+
+/**
+ * Delete AC in backend
+ */
+export async function deleteAcInBackend(id: string): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/acs/${id}`, {
+    method: 'DELETE',
+    headers: buildHeaders(false),
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to delete AC')
+  }
+
+  const result: ApiResponse<{ deleted: boolean }> = await response.json()
+  return result.data.deleted
+}
+
+/**
+ * Create sala in backend
+ */
+export async function createSalaInBackend(data: SalaCreateRequest): Promise<SalaDetailResponse> {
+  const response = await fetch(`${API_BASE_URL}/salas`, {
+    method: 'POST',
+    headers: buildHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to create sala')
+  }
+
+  const result: ApiResponse<SalaDetailResponse> = await response.json()
+  return result.data
+}
+
+/**
+ * Update sala in backend
+ */
+export async function updateSalaInBackend(id: string, data: SalaUpdateRequest): Promise<SalaResponse> {
+  const response = await fetch(`${API_BASE_URL}/salas/${id}`, {
+    method: 'PATCH',
+    headers: buildHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to update sala')
+  }
+
+  const result: ApiResponse<SalaResponse> = await response.json()
+  return result.data
+}
+
+/**
+ * Delete sala in backend
+ */
+export async function deleteSalaInBackend(id: string): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/salas/${id}`, {
+    method: 'DELETE',
+    headers: buildHeaders(false),
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to delete sala')
+  }
+
+  const result: ApiResponse<{ deleted: boolean }> = await response.json()
+  return result.data.deleted
+}
+
+export async function getNodesByClientFromBackend(clientId: string): Promise<NodeResponse[]> {
+  try {
+    const url = `${API_BASE_URL}/nodes/clientes/${clientId}`
+    console.log('[apiService] GET nodes by client:', { url, clientId })
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    console.log('[apiService] Response status:', response.status, response.statusText)
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      console.error('[apiService] Error response:', error)
+      throw new Error(error?.message || `Failed to load nodes (${response.status})`)
+    }
+
+    const result: ApiResponse<NodeResponse[]> = await response.json()
+    console.log('[apiService] Response data:', result)
+    return result.data
+  } catch (error) {
+    console.error('[apiService] Error in getNodesByClientFromBackend:', error)
+    throw error
+  }
+}
+
+export async function createCtncNodeInBackend(salaId: string, data: NodeCreateRequest): Promise<NodeResponse> {
+  try {
+    const url = `${API_BASE_URL}/salas/${salaId}/nodes`
+    console.log('[apiService] POST create CTN-C node:', { url, salaId, data })
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: buildHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(data),
+    })
+
+    console.log('[apiService] Response status:', response.status, response.statusText)
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      console.error('[apiService] Error response:', error)
+      throw new Error(error?.message || `Failed to create node (${response.status})`)
+    }
+
+    const result: ApiResponse<NodeResponse> = await response.json()
+    console.log('[apiService] Response data:', result)
+    return result.data
+  } catch (error) {
+    console.error('[apiService] Error in createCtncNodeInBackend:', error)
+    throw error
+  }
+}
+
+export async function updateNodeInBackend(nodeId: string, data: NodeUpdateRequest): Promise<NodeResponse> {
+  const response = await fetch(`${API_BASE_URL}/nodes/${nodeId}`, {
+    method: 'PATCH',
+    headers: buildHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to update node')
+  }
+
+  const result: ApiResponse<NodeResponse> = await response.json()
+  return result.data
+}
+
+export async function deleteNodeInBackend(nodeId: string): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/nodes/${nodeId}`, {
+    method: 'DELETE',
+    headers: buildHeaders(false),
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to delete node')
+  }
+
+  const result: ApiResponse<{ deleted: boolean }> = await response.json()
+  return result.data.deleted
 }

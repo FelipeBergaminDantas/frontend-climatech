@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
 import { getAllClients, getClientName } from '@/services/clientService'
-import { getNodes } from '@/services/nodeService'
+import { getNodesByClientFromBackend, type NodeResponse } from '@/services/apiService'
 import { useRouter } from 'next/navigation'
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -25,7 +25,9 @@ export default function OverviewPage() {
   // Filtro de cliente para visão geral
   const [selectedClientId, setSelectedClientId] = useState<string>('all')
   const [clients, setClients] = useState<Array<{id: string, name: string, isActive: boolean}>>([])
+  const [clientNodes, setClientNodes] = useState<Record<string, NodeResponse[]>>({})
   const [isLoadingClients, setIsLoadingClients] = useState(true)
+  const [isLoadingNodeCounts, setIsLoadingNodeCounts] = useState(false)
   
   // Filtro de mês/ano para consumo de energia
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
@@ -53,6 +55,39 @@ export default function OverviewPage() {
     }
   }, [user?.role])
 
+  // Carregar nodes para contagem no overview
+  useEffect(() => {
+    let mounted = true
+
+    async function loadClientNodes() {
+      if (user?.role !== 'admin_master' || clients.length === 0) {
+        if (mounted) setClientNodes({})
+        return
+      }
+
+      setIsLoadingNodeCounts(true)
+      try {
+        const entries = await Promise.all(clients.map(async (client) => {
+          const nodes = await getNodesByClientFromBackend(client.id)
+          return [client.id, nodes] as const
+        }))
+        if (mounted) {
+          setClientNodes(Object.fromEntries(entries))
+        }
+      } catch (error) {
+        console.error('[clientsPage] Error loading client nodes:', error)
+        if (mounted) setClientNodes({})
+      } finally {
+        if (mounted) setIsLoadingNodeCounts(false)
+      }
+    }
+
+    loadClientNodes()
+    return () => {
+      mounted = false
+    }
+  }, [user?.role, clients])
+
   // Tela de carregamento enquanto verifica clientes ativos
   if (authLoading || !user || user.role !== 'admin_master' || isLoadingClients) {
     return (
@@ -64,7 +99,7 @@ export default function OverviewPage() {
   }
 
   // Estatísticas gerais
-  const nodes = getNodes()
+  const nodes = Object.values(clientNodes).flat()
   const activeClients = clients // Já filtrados como ativos
   
   // Filtrar dados por cliente selecionado
@@ -74,23 +109,20 @@ export default function OverviewPage() {
   
   const filteredNodes = selectedClientId === 'all'
     ? nodes
-    : nodes.filter(n => {
-        const room = rooms.find(r => r.id === n.roomId)
-        return room?.clientId === selectedClientId
-      })
+    : clientNodes[selectedClientId] ?? []
 
   const totalClients = activeClients.length
   const totalDevices = filteredNodes.length
-  const totalCTNC = filteredNodes.filter(n => n.type === 'CTNC').length
-  const totalCTNR = filteredNodes.filter(n => n.type === 'CTNR').length
+  const totalCTNC = filteredNodes.filter(n => n.node_type === 'CTN-C').length
+  const totalCTNR = filteredNodes.filter(n => n.node_type === 'CTN-R').length
   
   // Contar ACs das salas filtradas
   const totalACs = filteredRooms.reduce((sum, room) => sum + room.acCount, 0)
   const totalRooms = filteredRooms.length
 
   // Dispositivos online/offline (baseado em nodes, não rooms)
-  const nodesOnline = filteredNodes.filter(n => n.status === 'online').length
-  const nodesOffline = filteredNodes.filter(n => n.status === 'offline').length
+  const nodesOnline = filteredNodes.filter(n => (n.ultimo_status || '').toLowerCase().includes('online')).length
+  const nodesOffline = filteredNodes.filter(n => !(n.ultimo_status || '').toLowerCase().includes('online')).length
 
   // Temperaturas por estado (crítico, atenção, correto)
   const roomsCritical = filteredRooms.filter(r => {
@@ -138,7 +170,7 @@ export default function OverviewPage() {
   const isConsumptionDown = consumptionDiff < 0
   
   // Lista de clientes para o filtro
-  const clientIds = Array.from(new Set(rooms.map(r => r.clientId)))
+  const clientIds = activeClients.map((client) => client.id)
 
   return (
     <main className="min-h-screen px-4 sm:px-6 py-6 sm:py-8 pb-16 bg-white">
