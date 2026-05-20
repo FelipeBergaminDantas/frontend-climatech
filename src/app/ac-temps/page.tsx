@@ -6,6 +6,8 @@ import { useRooms } from '@/contexts/RoomsContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { getClientName } from '@/services/clientService'
 import { getAcs, getAcsBySala, updateAc, deleteAc } from '@/services/acService'
+import { verifyCurrentPassword } from '@/services/userService'
+import { PasswordConfirmModal } from '@/components/ui/PasswordConfirmModal'
 import type { Ac } from '@/types'
 
 export default function AcTempsPage() {
@@ -19,6 +21,7 @@ export default function AcTempsPage() {
   const [editingAc, setEditingAc] = useState<Ac | null>(null)
   const [novoNomeAc, setNovoNomeAc] = useState<string>('')
   const [actionLoading, setActionLoading] = useState(false)
+  const [pendingDeleteAcId, setPendingDeleteAcId] = useState<string | null>(null)
 
   const roomMap = useMemo(() => {
     return new Map(rooms.map((room) => [room.id, room.name]))
@@ -83,18 +86,24 @@ export default function AcTempsPage() {
   }
 
   async function handleDelete(acId: string) {
-    const confirmed = window.confirm('Tem certeza que deseja excluir este AC? Esta ação não pode ser desfeita.')
-    if (!confirmed) return
+    setError(null)
+    setPendingDeleteAcId(acId)
+  }
+
+  async function confirmDeleteAc(password: string) {
+    if (!pendingDeleteAcId) return
 
     setActionLoading(true)
     setError(null)
 
     try {
-      await deleteAc(acId)
-      setAcs((prev) => prev.filter((item) => item.id !== acId))
+      await verifyCurrentPassword(password)
+      await deleteAc(pendingDeleteAcId)
+      setAcs((prev) => prev.filter((item) => item.id !== pendingDeleteAcId))
+      setPendingDeleteAcId(null)
     } catch (err) {
       console.error('Failed to delete AC:', err)
-      setError('Falha ao excluir o AC. Tente novamente.')
+      setError(err instanceof Error ? err.message : 'Falha ao excluir o AC. Tente novamente.')
     } finally {
       setActionLoading(false)
     }
@@ -211,6 +220,17 @@ export default function AcTempsPage() {
           </div>
         )}
       </div>
+
+      {pendingDeleteAcId && (
+        <PasswordConfirmModal
+          title="Confirmar exclusão de AC"
+          message="Digite sua senha para confirmar a exclusão permanente deste AC. Esta ação não pode ser desfeita."
+          onConfirm={confirmDeleteAc}
+          onClose={() => setPendingDeleteAcId(null)}
+          confirmButtonText="Excluir"
+          isDangerous
+        />
+      )}
 
       {editingAc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6">
