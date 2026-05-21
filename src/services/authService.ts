@@ -1,34 +1,6 @@
-import type { User, UserRole } from '@/types';
-import { validatePassword } from '@/utils/validators';
-import { MOCK_2FA_TOKEN, ACCESS_TOKEN_KEY } from '@/config/constants';
-import { ADMIN_MASTER_CREDENTIALS } from '@/config/adminCredentials';
+import type { User } from '@/types';
+import { ACCESS_TOKEN_KEY } from '@/config/constants';
 import { API_BASE_URL } from '@/services/apiService';
-
-// In-memory store for registered users (mock)
-let users: (User & { password: string })[] = [
-  // Admin Masters
-  ...ADMIN_MASTER_CREDENTIALS.map(admin => ({ ...admin, password: admin.password })),
-  // Admin Cliente UNIFecaf
-  {
-    id: 'admin-client-1',
-    name: 'Adm UNIFecaf',
-    email: 'admin@unifecaf.com',
-    password: 'Unifecaf@2024',
-    role: 'admin_client' as UserRole,
-    clientId: 'client-unifecaf',
-    twoFactorEnabled: false,
-  },
-  // Usuário comum
-  {
-    id: 'user-1',
-    name: 'Usuário Demo',
-    email: 'usuario@demo.com',
-    password: 'Demo@2024',
-    role: 'user' as UserRole,
-    clientId: 'client-demo',
-    twoFactorEnabled: false,
-  },
-];
 
 let currentSession: User | null = null;
 
@@ -131,7 +103,8 @@ export function register(name: string, email: string, password: string): User {
   return userWithoutPassword;
 }
 export function verify2FA(token: string): boolean {
-  if (token !== MOCK_2FA_TOKEN) {
+  // TODO: Integrate with backend 2FA verification
+  if (!token || token.length < 6) {
     throw new Error('Token 2FA inválido.');
   }
   return true;

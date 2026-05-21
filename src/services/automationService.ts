@@ -3,12 +3,11 @@ import type {
   AutomationLog,
   DeviceState,
 } from '@/types';
-import { mockAutomationRules } from './mockData';
 import { validateTempRange, validateSchedule } from '@/utils/validators';
 import { sendCommand } from './deviceService';
 
-// In-memory stores
-let rules: AutomationRule[] = [...mockAutomationRules];
+// In-memory stores — TODO: Replace with API calls to backend
+let rules: AutomationRule[] = [];
 let logs: AutomationLog[] = [];
 
 export function getRules(roomId: string): AutomationRule[] {
@@ -177,6 +176,6 @@ export function getLogs(roomId?: string): AutomationLog[] {
 
 /** Reset store — used in tests */
 export function _resetRules(): void {
-  rules = [...mockAutomationRules];
+  rules = [];
   logs = [];
 }

@@ -18,23 +18,10 @@ const SUGGESTIONS = [
   'Como reduzir o consumo de energia?',
 ]
 
-const MOCK_RESPONSES: Record<string, string> = {
-  default: 'Entendi sua pergunta! Em breve terei acesso aos dados em tempo real para responder com precisão. Por enquanto, estou em modo de demonstração.',
-  energia: 'Com base nos dados simulados, seu consumo estimado é de **42.3 kWh** neste mês. Isso representa uma redução de 12% em relação ao mês anterior. As salas com AC ligado consomem em média 1.2 kWh por hora.',
-  sala: 'A **Sala de Estar** é a que mais consome energia, com aproximadamente 18.5 kWh mensais. Isso se deve ao uso mais frequente e ao modo de refrigeração contínua.',
-  temperatura: 'A temperatura média atual de todas as salas é **22.3°C**. O Quarto Principal está ligeiramente acima do ideal (26°C vs. ideal de 18–22°C).',
-  ligar: 'Recomendo ligar o ar-condicionado quando a temperatura ultrapassar 24°C. Com base no histórico, isso costuma ocorrer entre 13h e 17h nos dias de semana.',
-  reduzir: 'Para reduzir o consumo: 1) Configure automações para desligar o AC à noite, 2) Mantenha a temperatura alvo em 23°C em vez de 20°C, 3) Use o modo "Ventilador" em dias mais amenos.',
-}
-
-function getMockResponse(question: string): string {
-  const q = question.toLowerCase()
-  if (q.includes('energia') || q.includes('gastando') || q.includes('kwh')) return MOCK_RESPONSES.energia
-  if (q.includes('sala') || q.includes('consome mais')) return MOCK_RESPONSES.sala
-  if (q.includes('temperatura') || q.includes('média')) return MOCK_RESPONSES.temperatura
-  if (q.includes('ligar') || q.includes('quando')) return MOCK_RESPONSES.ligar
-  if (q.includes('reduzir') || q.includes('economizar')) return MOCK_RESPONSES.reduzir
-  return MOCK_RESPONSES.default
+// Mock responses removed — waiting for backend AI implementation
+async function getMockResponse(question: string): Promise<string> {
+  // TODO: Replace with actual API call to AI service
+  return 'Desculpe, o serviço de IA está indisponível no momento. Por favor, tente novamente mais tarde.'
 }
 
 export default function AIPage() {
@@ -66,7 +53,7 @@ export default function AIPage() {
 
     await new Promise(r => setTimeout(r, 1200 + Math.random() * 800))
 
-    const response = getMockResponse(text)
+    const response = await getMockResponse(text)
     const aiMsg: Message = { id: (Date.now() + 1).toString(), role: 'assistant', content: response, timestamp: new Date() }
     setMessages(prev => [...prev, aiMsg])
     setIsTyping(false)

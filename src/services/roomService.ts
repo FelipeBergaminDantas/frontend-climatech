@@ -1,9 +1,8 @@
 import type { Room } from '@/types';
-import { mockRooms } from './mockData';
 import { validateRoomName } from '@/utils/validators';
 
-// In-memory store
-let rooms: Room[] = [...mockRooms];
+// In-memory store — TODO: Replace with API calls to backend
+let rooms: Room[] = [];
 
 export function getRooms(userId: string): Room[] {
   return rooms.filter((r) => r.userId === userId);
@@ -78,6 +77,6 @@ export function deleteRoom(id: string): void {
 }
 
 /** Reset store — used in tests */
-export function _resetRooms(data: Room[] = [...mockRooms]): void {
+export function _resetRooms(data: Room[] = []): void {
   rooms = [...data];
 }

@@ -7,7 +7,6 @@ import { useRooms } from '@/contexts/RoomsContext'
 import { RoomForm } from '@/components/rooms/RoomForm'
 import { getAllClients } from '@/services/clientService'
 import type { Room, Client } from '@/types'
-import { OWNER_ID } from '@/config/constants'
 
 export default function NewRoomPage() {
   const router = useRouter()
@@ -37,7 +36,7 @@ export default function NewRoomPage() {
   if (!isAuthenticated && !authLoading) return null
   if (isAuthenticated && !isAdmin) return null
 
-  const userId = user?.id ?? OWNER_ID
+  const userId = user?.id || ''
 
   async function handleSave(roomData: Room) {
     const clientId = isAllClientsView ? selectedClientId : (user?.role === 'admin_master'

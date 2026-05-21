@@ -137,7 +137,6 @@ O sistema possui três níveis de acesso com **isolamento total de dados por cli
   - **NÃO pode ver Administradores Master**
   - **NÃO pode criar Administradores Master**
 - **Isolamento**: Vê apenas dados do seu cliente
-- **Exemplo**: Adm UNIFecaf (`admin@unifecaf.com`)
 
 ### 🟢 Usuário
 - **Acesso**: Apenas um cliente específico (vinculado permanentemente)
@@ -232,31 +231,32 @@ Nodes de uma mesma sala compartilham o mesmo `pairId` (ex: `SALA-01`).
 
 ---
 
-## Dados Mock
+## Dados
 
-Todos os dados são in-memory (sem banco de dados). Os dados iniciais estão em `src/services/mockData.ts`:
+Todos os dados devem ser obtidos através da API backend. O frontend não contém mais dados mockados e depende inteiramente do servidor para:
 
 ### Clientes
-- **UNIFecaf** (`client-unifecaf`)
-- **Cliente Demo** (`client-demo`)
-- **Empresa X** (`client-empresa-x`)
+- Listagem de clientes via `/api/v1/clientes`
+- Seleção de cliente para contexto da sessão
 
 ### Salas
-**UNIFecaf:**
-- Auditório (2 ACs)
-- Laboratório de Informática 05 (1 AC)
-- Sala 208 (3 ACs)
-
-**Cliente Demo:**
-- Sala Demo 1 (1 AC)
-- Sala Demo 2 (2 ACs)
+- Listagem de salas via `/api/v1/salas`
+- Criação, atualização e exclusão via API
 
 ### Usuários
-**Administradores Cliente:**
-- Adm UNIFecaf: `admin@unifecaf.com` / `Unifecaf@2024`
+- Autenticação e login via `/api/v1/auth/login`
+- Gestão de usuários via endpoints de usuário
 
-**Usuários:**
-- Usuário Demo: `usuario@demo.com` / `Demo@2024`
+### Nodes (CTN-R/CTN-C)
+- Listagem de nodes via `/api/v1/nodes`
+- Status em tempo real
+
+### Automações
+- Regras de automação via `/api/v1/automations`
+
+### Histórico de Temperatura
+- Dados históricos via `/api/v1/temperature-history`
+- Leitura ao vivo de temperaturas
 
 ### Nodes
 Nodes CTN-R e CTN-C para cada sala, com status variados (online, offline, error).

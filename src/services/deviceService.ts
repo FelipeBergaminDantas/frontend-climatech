@@ -1,9 +1,8 @@
 import type { DeviceState, DeviceMode, FanSpeed, TemperatureReading } from '@/types';
-import { mockDeviceStates, mockTemperatureHistory } from './mockData';
 import { validateTargetTemp } from '@/utils/validators';
 
-// In-memory store
-let deviceStates: DeviceState[] = mockDeviceStates.map((s) => ({ ...s }));
+// In-memory store — TODO: Replace with API calls to backend
+let deviceStates: DeviceState[] = [];
 
 export function getDeviceState(roomId: string): DeviceState {
   const state = deviceStates.find((s) => s.roomId === roomId);
@@ -55,43 +54,14 @@ export async function sendCommand(
 }
 
 export function getTemperatureHistory(roomId: string, date?: Date): TemperatureReading[] {
-  const all = mockTemperatureHistory[roomId];
-  if (!all) return [];
-
-  if (!date) {
-    // Default: last 24h (today)
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    return all.filter(r => new Date(r.timestamp).getTime() >= cutoff);
-  }
-
-  // Filter to the requested calendar day
-  const y = date.getFullYear(), mo = date.getMonth(), d = date.getDate();
-  const dayStart = new Date(y, mo, d).getTime();
-  const dayEnd = dayStart + 24 * 60 * 60 * 1000;
-  const filtered = all.filter(r => {
-    const t = new Date(r.timestamp).getTime();
-    return t >= dayStart && t < dayEnd;
-  });
-
-  if (filtered.length > 0) return filtered;
-
-  // No data for requested date — find nearest available date
-  const available = [...new Set(all.map(r => {
-    const d2 = new Date(r.timestamp);
-    return new Date(d2.getFullYear(), d2.getMonth(), d2.getDate()).getTime();
-  }))].sort((a, b) => Math.abs(a - dayStart) - Math.abs(b - dayStart));
-
-  if (available.length === 0) return [];
-  const nearest = new Date(available[0]);
-  return getTemperatureHistory(roomId, nearest);
+  // TODO: Fetch from API instead of mock data
+  return [];
 }
 
 /** Returns available dates (as ISO date strings) for a room */
 export function getAvailableDates(roomId: string): string[] {
-  const all = mockTemperatureHistory[roomId];
-  if (!all) return [];
-  const dates = new Set(all.map(r => r.timestamp.slice(0, 10)));
-  return [...dates].sort();
+  // TODO: Fetch from API instead of mock data
+  return [];
 }
 
 /**
@@ -122,5 +92,5 @@ export function getLiveReadings(roomId: string, minutes = 60): TemperatureReadin
 
 /** Reset store — used in tests */
 export function _resetDeviceStates(): void {
-  deviceStates = mockDeviceStates.map((s) => ({ ...s }));
+  deviceStates = [];
 }
