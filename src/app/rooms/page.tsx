@@ -93,6 +93,7 @@ export default function RoomsPage() {
           location: roomData.location,
           idealTempMin: roomData.idealTempMin,
           idealTempMax: roomData.idealTempMax,
+          targetTemp: roomData.targetTemp,
         })
         setEditingRoom(null)
       }

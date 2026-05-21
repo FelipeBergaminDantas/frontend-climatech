@@ -241,7 +241,7 @@ export default function DashboardPage() {
   const totalRooms = filteredRooms.length
 
   const status = selectedRoom && selectedState
-    ? getIndicatorStatus(selectedState.currentTemp, selectedState.targetTemp)
+    ? getIndicatorStatus(selectedState.currentTemp, selectedRoom.idealTempMin, selectedRoom.idealTempMax)
     : 'ok'
 
   const statusColor = { ok: '#10c98f', warning: '#f59e0b', critical: '#ef4444' }[status]

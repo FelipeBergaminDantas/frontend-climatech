@@ -34,6 +34,7 @@ interface FormErrors {
   acCount?: string
   idealTempMin?: string
   idealTempMax?: string
+  targetTemp?: string
 }
 
 export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProps) {
@@ -46,6 +47,7 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
   )
   const [idealTempMin, setIdealTempMin] = useState(initialRoom?.idealTempMin?.toString() ?? '')
   const [idealTempMax, setIdealTempMax] = useState(initialRoom?.idealTempMax?.toString() ?? '')
+  const [targetTemp, setTargetTemp] = useState(initialRoom?.targetTemp?.toString() ?? '')
   const [errors, setErrors] = useState<FormErrors>({})
   const [isLoading, setIsLoading] = useState(false)
 
@@ -129,14 +131,33 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
 
     if (idealTempMin === '' || isNaN(min)) {
       next.idealTempMin = 'Temperatura mínima é obrigatória.'
+    } else if (min < 16) {
+      next.idealTempMin = 'Temperatura mínima deve ser 16°C ou superior.'
     }
 
     if (idealTempMax === '' || isNaN(max)) {
       next.idealTempMax = 'Temperatura máxima é obrigatória.'
+    } else if (max > 30) {
+      next.idealTempMax = 'Temperatura máxima deve ser 30°C ou inferior.'
     }
 
     if (!isNaN(min) && !isNaN(max) && max <= min) {
       next.idealTempMax = 'A temperatura máxima deve ser maior que a mínima.'
+    }
+
+    if (targetTemp === '') {
+      next.targetTemp = 'Temperatura alvo é obrigatória.'
+    } else {
+      const temp = parseFloat(targetTemp)
+      if (isNaN(temp)) {
+        next.targetTemp = 'Temperatura alvo deve ser um número.'
+      } else if (temp < 16 || temp > 30) {
+        next.targetTemp = 'A temperatura alvo deve estar entre 16°C e 30°C.'
+      } else if (!isNaN(min) && temp < min) {
+        next.targetTemp = 'A temperatura alvo deve ser maior ou igual à temperatura ideal mínima.'
+      } else if (!isNaN(max) && temp > max) {
+        next.targetTemp = 'A temperatura alvo deve ser menor ou igual à temperatura ideal máxima.'
+      }
     }
 
     setErrors(next)
@@ -160,6 +181,7 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
         ctncNodeIds: ctncNodeIds.map((id) => id.trim()),
         idealTempMin: parseFloat(idealTempMin),
         idealTempMax: parseFloat(idealTempMax),
+        targetTemp: targetTemp.trim() ? parseFloat(targetTemp) : undefined,
         createdAt: initialRoom?.createdAt ?? '',
       }
 
@@ -236,12 +258,15 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
         ))}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Input
           label="Temp. ideal mínima (°C)"
           id="room-temp-min"
           name="room-temp-min"
           type="number"
+          min={16}
+          max={30}
+          step="0.5"
           value={idealTempMin}
           onChange={(e) => setIdealTempMin(e.target.value)}
           error={errors.idealTempMin}
@@ -253,15 +278,32 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
           id="room-temp-max"
           name="room-temp-max"
           type="number"
+          min={16}
+          max={30}
+          step="0.5"
           value={idealTempMax}
           onChange={(e) => setIdealTempMax(e.target.value)}
           error={errors.idealTempMax}
           required
           placeholder="Ex: 24"
         />
+        <Input
+          label="Temp. alvo (°C)"
+          id="room-temp-target"
+          name="room-temp-target"
+          type="number"
+          step="0.5"
+          min={16}
+          max={30}
+          value={targetTemp}
+          onChange={(e) => setTargetTemp(e.target.value)}
+          error={errors.targetTemp}
+          required
+          placeholder="Ex: 22"
+        />
       </div>
 
-      <div className="flex justify-end gap-3 pt-2">
+      <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancelar
         </Button>

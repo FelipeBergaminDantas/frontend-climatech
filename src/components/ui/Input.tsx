@@ -24,7 +24,7 @@ export function Input({
       {label && (
         <label
           htmlFor={inputId}
-          className="text-sm font-medium text-gray-700 dark:text-gray-300"
+          className="min-h-[2.5rem] leading-tight text-sm font-medium text-gray-700 dark:text-gray-300"
         >
           {label}
           {required && <span className="ml-1 text-red-500" aria-hidden="true">*</span>}
@@ -38,7 +38,7 @@ export function Input({
         aria-invalid={!!error}
         aria-describedby={error ? `${inputId}-error` : undefined}
         className={[
-          'w-full rounded-lg border px-3 py-2 text-sm transition-colors duration-150',
+          'block w-full min-w-0 appearance-none rounded-lg border px-3 text-sm h-12 transition-colors duration-150',
           'bg-white text-gray-900 placeholder-gray-400',
           'dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500',
           'focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1',

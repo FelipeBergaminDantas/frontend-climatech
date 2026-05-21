@@ -13,14 +13,17 @@ export function validateEmail(email: string): void {
 }
 
 /**
- * Returns the visual indicator status for a room based on current temperature
- * vs the target temperature set by the admin.
+ * Returns the visual indicator status for a room based on current temperature.
  *
+ * When the ideal range is available:
+ * - 'ok'       → currentTemp is inside [idealMin, idealMax]
+ * - 'warning'  → currentTemp is outside the ideal range but within 3°C of it
+ * - 'critical' → currentTemp is more than 3°C outside the ideal range
+ *
+ * When only a target temperature is available:
  * - 'ok'       → |currentTemp - targetTemp| <= 0.5°C
  * - 'warning'  → difference is > 0.5°C and <= 3°C
  * - 'critical' → difference is > 3°C
- *
- * The targetTemp defaults to the center of the ideal range when not manually set.
  */
 export function getIndicatorStatus(
   currentTemp: number,
@@ -36,11 +39,18 @@ export function getIndicatorStatus(
   targetOrMin: number,
   idealMax?: number
 ): IndicatorStatus {
-  const targetTemp =
-    idealMax === undefined
-      ? targetOrMin
-      : (targetOrMin + idealMax) / 2
+  if (idealMax !== undefined) {
+    const idealMin = targetOrMin
+    if (currentTemp >= idealMin && currentTemp <= idealMax) {
+      return 'ok'
+    }
+    if (currentTemp < idealMin) {
+      return currentTemp >= idealMin - 3 ? 'warning' : 'critical'
+    }
+    return currentTemp <= idealMax + 3 ? 'warning' : 'critical'
+  }
 
+  const targetTemp = targetOrMin
   const diff = Math.abs(currentTemp - targetTemp)
   if (diff <= 0.5) return 'ok'
   if (diff <= 3) return 'warning'

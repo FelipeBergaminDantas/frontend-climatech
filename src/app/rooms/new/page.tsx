@@ -58,6 +58,7 @@ export default function NewRoomPage() {
         location: roomData.location,
         idealTempMin: roomData.idealTempMin,
         idealTempMax: roomData.idealTempMax,
+        targetTemp: roomData.targetTemp,
       })
       router.replace('/rooms')
     } catch (error) {

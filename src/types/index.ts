@@ -32,6 +32,7 @@ export interface Room {
   location?: string;
   idealTempMin: number;
   idealTempMax: number;
+  targetTemp?: number | null; // Temperatura alvo (16-30°C) — pode ser nula inicialmente
   createdAt: string;
 }
 

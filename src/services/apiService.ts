@@ -50,6 +50,7 @@ export interface SalaCreateRequest {
   nome_sala: string;
   temp_ideal_min: number;
   temp_ideal_max: number;
+  temp_alvo?: number | null;
   ctnr_node_id: string;
   ctnc_nodes: string[];
 }
@@ -58,6 +59,7 @@ export interface SalaUpdateRequest {
   nome_sala?: string;
   temp_ideal_min?: number;
   temp_ideal_max?: number;
+  temp_alvo?: number | null;
 }
 
 export interface SalaResponse {
@@ -68,6 +70,7 @@ export interface SalaResponse {
   qtd_ac: number;
   temp_ideal_min: number;
   temp_ideal_max: number;
+  temp_alvo?: number | null;
   dth_criacao_at: string;
   dth_atualizacao_at?: string;
 }
