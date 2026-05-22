@@ -1,7 +1,9 @@
 import type { User } from '@/types';
 import { ACCESS_TOKEN_KEY } from '@/config/constants';
 import { API_BASE_URL } from '@/services/apiService';
+import { validatePassword } from '@/utils/validators';
 
+const users: Array<User & { password: string }> = [];
 let currentSession: User | null = null;
 
 function setAccessToken(token: string | null, rememberMe = false) {
