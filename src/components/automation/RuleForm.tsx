@@ -21,7 +21,7 @@ interface FormErrors {
   horaFim?: string
 }
 
-export function RuleForm({ roomId, rooms, onSave, onCancel, initialRule }: RuleFormProps) {
+export function RuleForm({ roomId, rooms, onSave, onCancel, closeOnSave = true, initialRule }: RuleFormProps) {
   const [nomeAutomacao, setNomeAutomacao] = useState(initialRule?.nomeAutomacao ?? '')
   const [selectedRoomId, setSelectedRoomId] = useState(initialRule?.roomId ?? roomId)
   const [flSomenteDiaUtil, setFlSomenteDiaUtil] = useState(initialRule?.flSomenteDiaUtil ?? false)

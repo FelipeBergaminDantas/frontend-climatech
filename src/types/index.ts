@@ -103,6 +103,8 @@ export interface AutomationState {
   status?: string;
 }
 
+export type AutomationAction = string;
+
 export interface AutomationLog {
   id: string;
   ruleId: string;

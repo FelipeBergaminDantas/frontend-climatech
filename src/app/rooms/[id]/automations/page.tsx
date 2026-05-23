@@ -51,11 +51,42 @@ export default function AutomationsPage({ params }: PageProps) {
 
   if (!isAuthenticated && !authLoading) return null
 
-  async function handleSave(rule: AutomationRule) {
+  type AutomationRuleFormData = Omit<AutomationRule, 'id' | 'createdAt' | 'updatedAt' | 'runtimeStatus'>
+
+  async function handleSave(data: AutomationRuleFormData) {
     if (editingRule) {
-      await updateRule(editingRule.id, rule)
+      await updateRule(editingRule.id, {
+        nomeAutomacao: data.nomeAutomacao,
+        flSomenteDiaUtil: data.flSomenteDiaUtil,
+        flSegunda: data.flSegunda,
+        flTerca: data.flTerca,
+        flQuarta: data.flQuarta,
+        flQuinta: data.flQuinta,
+        flSexta: data.flSexta,
+        flSabado: data.flSabado,
+        flDomingo: data.flDomingo,
+        horaInicio: data.horaInicio,
+        horaFim: data.horaFim,
+        prioridade: data.prioridade,
+        flAtivo: data.flAtivo,
+      })
     } else {
-      await createRule(rule)
+      await createRule({
+        clientId: data.clientId,
+        roomId: data.roomId,
+        nomeAutomacao: data.nomeAutomacao,
+        flSomenteDiaUtil: data.flSomenteDiaUtil,
+        flSegunda: data.flSegunda,
+        flTerca: data.flTerca,
+        flQuarta: data.flQuarta,
+        flQuinta: data.flQuinta,
+        flSexta: data.flSexta,
+        flSabado: data.flSabado,
+        flDomingo: data.flDomingo,
+        horaInicio: data.horaInicio,
+        horaFim: data.horaFim,
+        prioridade: data.prioridade,
+      })
     }
     setIsFormOpen(false)
     setEditingRule(undefined)

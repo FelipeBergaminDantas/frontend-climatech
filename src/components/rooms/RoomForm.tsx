@@ -203,6 +203,7 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
       await onSave(roomData)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar sala.'
+      const lower = msg.toLowerCase()
       if (isAutomationTempError(msg)) {
         setErrors((prev) => ({ ...prev, targetTemp: msg }))
       } else if (lower.includes('identificador') || lower.includes('ctn-r')) {
