@@ -229,6 +229,11 @@ export function RuleForm({ roomId, rooms, onSave, onCancel, closeOnSave = true, 
             <option key={value} value={value}>{value}</option>
           ))}
         </select>
+        <p className="text-xs text-slate-500">
+          Reservado para quando houver automação por temperatura. Enquanto só existir gatilho por período,
+          todas as regras ativas são executadas. A prioridade só prevalece se período e temperatura
+          dispararem no mesmo instante na mesma sala (maior número vence).
+        </p>
       </div>
 
       <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/30 dark:bg-amber-950/10 dark:text-amber-200 space-y-2">
@@ -239,6 +244,7 @@ export function RuleForm({ roomId, rooms, onSave, onCancel, closeOnSave = true, 
           <div>
             <p className="font-medium">Aviso importante sobre a automação</p>
             <p className="mt-1">O AC será <strong>desligado automaticamente 2 minutos antes</strong> do horário de início. Portanto, <strong>não ligue o AC manualmente</strong> a partir de 2 minutos antes da automação começar.</p>
+            <p className="mt-2">Na mesma sala, outra automação só pode começar <strong>2 minutos após o fim</strong> de uma existente (ou terminar <strong>2 minutos antes do início</strong> dela). Ex.: 16:30–16:40 → próxima a partir de 16:42 ou até 16:28.</p>
           </div>
         </div>
       </div>

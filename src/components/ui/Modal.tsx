@@ -32,7 +32,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'modal-title' : undefined}
@@ -44,17 +44,19 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
         aria-hidden="true"
       />
 
-      {/* Panel */}
+      {/* Panel — max height + scrollable body for long forms on mobile */}
       <div
         className={[
-          'relative z-10 w-full max-w-md rounded-xl bg-white shadow-xl',
+          'relative z-10 flex w-full max-w-md flex-col',
+          'max-h-[min(90dvh,100%)] sm:max-h-[90vh]',
+          'rounded-t-2xl sm:rounded-xl bg-white shadow-xl',
           'dark:bg-gray-800 dark:border dark:border-gray-700',
           'animate-scale-in',
         ].join(' ')}
       >
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-4 dark:border-gray-700">
             <h2
               id="modal-title"
               className="text-base font-semibold text-gray-900 dark:text-gray-100"
@@ -84,7 +86,9 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
         )}
 
         {/* Body */}
-        <div className="px-6 py-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-5">
+          {children}
+        </div>
       </div>
     </div>
   )
