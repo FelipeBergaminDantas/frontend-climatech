@@ -1,32 +1,21 @@
 'use client'
 
 import { useMemo, useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
 import { useAutomations } from '@/contexts/AutomationsContext'
 import { useClientStatus } from '@/hooks/useClientStatus'
 import { getClientName, getAllClients } from '@/services/clientService'
 import { Modal } from '@/components/ui/Modal'
+import { PasswordConfirmModal } from '@/components/ui/PasswordConfirmModal'
 import { RuleForm } from '@/components/automation/RuleForm'
+import { RuleList } from '@/components/automation/RuleList'
 import type { AutomationRule, Client } from '@/types'
 
-const ACTION_LABEL: Record<string, string> = {
-  turn_on: 'Ligar AC',
-  turn_off: 'Desligar AC',
-  set_temp: 'Ajustar temperatura',
-}
-
-const CONDITION_LABEL: Record<string, string> = {
-  schedule: 'Agendamento',
-  temperature: 'Temperatura',
-}
-
 export default function AutomationsPage() {
-  const router = useRouter()
   const { user } = useAuth()
   const { rooms } = useRooms()
-  const { getRulesForRoom, activeCount, totalCount, createRule } = useAutomations()
+  const { getRulesForRoom, activeCount, totalCount, createRule, updateRule, deleteRule, toggleRule, loadRules, loadStates } = useAutomations()
   const { canCreate } = useClientStatus()
   
   const isOverviewMode = user?.role === 'admin_master' && !user?.selectedClientId
@@ -34,8 +23,24 @@ export default function AutomationsPage() {
   
   const [filterClient, setFilterClient] = useState<string>('all')
   const [isFormOpen, setIsFormOpen] = useState(false)
+  const [editingRule, setEditingRule] = useState<AutomationRule | undefined>()
   const [selectedClientForRule, setSelectedClientForRule] = useState<string>('')
   const [clients, setClients] = useState<Client[]>([])
+
+  type PasswordActionType = 'toggle' | 'delete' | 'save'
+  interface PasswordAction {
+    type: PasswordActionType
+    ruleId?: string
+    rule?: AutomationRule
+    payload?: Omit<AutomationRule, 'id' | 'createdAt' | 'updatedAt' | 'runtimeStatus'>
+    isEdit?: boolean
+  }
+
+  const [pendingPasswordAction, setPendingPasswordAction] = useState<PasswordAction | null>(null)
+  const [pendingSaveResolver, setPendingSaveResolver] = useState<{
+    resolve: () => void
+    reject: (error: unknown) => void
+  } | null>(null)
   
   // Carregar clientes se estiver em modo overview
   useEffect(() => {
@@ -49,34 +54,140 @@ export default function AutomationsPage() {
     ? rooms.filter(r => r.clientId === filterClient)
     : rooms
 
+  const roomsToDisplay = isOverviewMode ? filteredRooms : rooms
+
   // Obter lista única de clientIds
   const clientIds = useMemo(() => {
     return Array.from(new Set(rooms.map(r => r.clientId)))
   }, [rooms])
 
-  // Agrupar salas por cliente
+  // Agrupar salas por cliente para exibir diretamente na visão geral
   const roomsByClient = useMemo(() => {
     if (!isOverviewMode) return {}
-    
+
     const grouped: Record<string, typeof rooms> = {}
-    rooms.forEach(room => {
+    roomsToDisplay.forEach(room => {
       if (!grouped[room.clientId]) {
         grouped[room.clientId] = []
       }
       grouped[room.clientId].push(room)
     })
     return grouped
-  }, [isOverviewMode, rooms])
+  }, [isOverviewMode, roomsToDisplay])
   
+  useEffect(() => {
+    if (!user) return
+
+    if (isOverviewMode) {
+      if (filterClient === 'all') {
+        loadRules(undefined)
+      } else {
+        loadRules(undefined, filterClient)
+      }
+      return
+    }
+
+    const clientId = user.selectedClientId || user.clientId
+    if (clientId) {
+      loadRules(undefined, clientId)
+    }
+  }, [filterClient, isOverviewMode, loadRules, user?.clientId, user?.selectedClientId, user])
+
+  useEffect(() => {
+    const roomsWithRules = roomsToDisplay.filter(room => getRulesForRoom(room.id).length > 0)
+    roomsWithRules.forEach(room => loadStates(room.id))
+  }, [roomsToDisplay, getRulesForRoom, loadStates])
+
+  // Poll automation states every 10 seconds to show real-time status
+  useEffect(() => {
+    const roomsWithRules = roomsToDisplay.filter(room => getRulesForRoom(room.id).length > 0)
+    if (roomsWithRules.length === 0) return
+
+    const interval = setInterval(() => {
+      roomsWithRules.forEach(room => {
+        loadStates(room.id).catch(err => console.error('Failed to load states for room', room.id, err))
+      })
+    }, 10000)
+
+    return () => clearInterval(interval)
+  }, [roomsToDisplay, getRulesForRoom, loadStates])
+
   // Salas disponíveis para criar automação (filtradas por cliente se em overview)
   const availableRoomsForCreation = isOverviewMode && selectedClientForRule
     ? rooms.filter(r => r.clientId === selectedClientForRule)
     : rooms
   
-  function handleSaveRule(rule: AutomationRule) {
-    createRule(rule)
-    setIsFormOpen(false)
-    setSelectedClientForRule('')
+  async function handleSaveRule(
+    rule: Omit<AutomationRule, 'id' | 'createdAt' | 'updatedAt' | 'runtimeStatus'>
+  ) {
+    return new Promise<void>((resolve, reject) => {
+      setPendingPasswordAction({
+        type: 'save',
+        rule: editingRule,
+        payload: rule,
+        isEdit: Boolean(editingRule),
+      })
+      setPendingSaveResolver({ resolve, reject })
+    })
+  }
+
+  function handleEditRule(rule: AutomationRule) {
+    setEditingRule(rule)
+    setIsFormOpen(true)
+    setSelectedClientForRule(rule.clientId)
+  }
+
+  function handleDeleteRule(ruleId: string) {
+    setPendingPasswordAction({ type: 'delete', ruleId })
+  }
+
+  function handleToggleRule(ruleId: string) {
+    setPendingPasswordAction({ type: 'toggle', ruleId })
+  }
+
+  function closePasswordModal() {
+    if (pendingSaveResolver) {
+      pendingSaveResolver.reject(new Error('Ação cancelada.'))
+    }
+    setPendingPasswordAction(null)
+    setPendingSaveResolver(null)
+  }
+
+  async function handleConfirmPassword(password: string) {
+    if (!pendingPasswordAction) return
+
+    try {
+      if (pendingPasswordAction.type === 'toggle' && pendingPasswordAction.ruleId) {
+        await toggleRule(pendingPasswordAction.ruleId, password)
+      }
+
+      if (pendingPasswordAction.type === 'delete' && pendingPasswordAction.ruleId) {
+        await deleteRule(pendingPasswordAction.ruleId, password)
+      }
+
+      if (pendingPasswordAction.type === 'save' && pendingPasswordAction.payload) {
+        if (pendingPasswordAction.isEdit && pendingPasswordAction.rule) {
+          await updateRule(pendingPasswordAction.rule.id, pendingPasswordAction.payload, password)
+          setEditingRule(undefined)
+        } else {
+          await createRule(pendingPasswordAction.payload, password)
+        }
+        setIsFormOpen(false)
+        setSelectedClientForRule('')
+      }
+
+      if (pendingSaveResolver) {
+        pendingSaveResolver.resolve()
+      }
+    } catch (error) {
+      if (pendingSaveResolver) {
+        pendingSaveResolver.reject(error)
+      }
+      throw error
+    } finally {
+      setPendingPasswordAction(null)
+      setPendingSaveResolver(null)
+    }
   }
 
   return (
@@ -144,7 +255,7 @@ export default function AutomationsPage() {
           </div>
         )}
 
-        {isOverviewMode && filterClient === 'all' ? (
+        {isOverviewMode ? (
           // Modo overview: agrupar por cliente
           <div className="space-y-6">
             {Object.entries(roomsByClient).map(([clientId, clientRooms]) => {
@@ -152,7 +263,7 @@ export default function AutomationsPage() {
               if (clientRoomsWithRules.length === 0) return null
               
               const clientActiveRules = clientRoomsWithRules.reduce((sum, room) => {
-                return sum + getRulesForRoom(room.id).filter(r => r.isActive).length
+                return sum + getRulesForRoom(room.id).filter(r => r.flAtivo).length
               }, 0)
               const clientTotalRules = clientRoomsWithRules.reduce((sum, room) => {
                 return sum + getRulesForRoom(room.id).length
@@ -172,7 +283,7 @@ export default function AutomationsPage() {
                   <div className="space-y-4">
                     {clientRoomsWithRules.map(room => {
                       const rules = getRulesForRoom(room.id)
-                      const active = rules.filter(r => r.isActive).length
+                      const active = rules.filter(r => r.flAtivo).length
                       return (
                         <div key={room.id} className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e8edf5' }}>
                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4" style={{ background: '#f8fafc', borderBottom: '1px solid #e8edf5' }}>
@@ -185,38 +296,15 @@ export default function AutomationsPage() {
                                 style={{ background: 'rgba(14,165,160,0.1)', color: '#0ea5a0' }}>
                                 {active}/{rules.length} ativas
                               </span>
-                              <button
-                                onClick={() => router.push(`/rooms/${room.id}/automations`)}
-                                className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
-                                style={{ background: 'white', color: '#1e5fa8', border: '1px solid #e2e8f0' }}
-                              >
-                                Gerenciar
-                              </button>
                             </div>
                           </div>
                           <div className="divide-y divide-slate-50">
-                            {rules.map(rule => (
-                              <div key={rule.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-5 py-3.5">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  <span className="w-2 h-2 rounded-full shrink-0"
-                                    style={{ background: rule.isActive ? '#10c98f' : '#cbd5e1' }} />
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate" style={{ color: '#0f2744' }}>{rule.name}</p>
-                                    <p className="text-xs text-slate-400 mt-0.5">
-                                      {CONDITION_LABEL[rule.conditionType]}
-                                      {rule.conditionType === 'schedule' && ` · ${rule.scheduleStart} – ${rule.scheduleEnd}`}
-                                      {rule.conditionType === 'temperature' && ` · ${rule.tempMin}°C – ${rule.tempMax}°C`}
-                                    </p>
-                                  </div>
-                                </div>
-                                <span className="shrink-0 self-start sm:self-auto text-xs px-2.5 py-1 rounded-full ml-5 sm:ml-4"
-                                  style={rule.isActive
-                                    ? { background: 'rgba(16,201,143,0.1)', color: '#10c98f' }
-                                    : { background: '#f1f5f9', color: '#94a3b8' }}>
-                                  {ACTION_LABEL[rule.action]}
-                                </span>
-                              </div>
-                            ))}
+                            <RuleList
+                              rules={rules}
+                              onToggle={isAdmin ? handleToggleRule : () => {}}
+                              onEdit={isAdmin ? handleEditRule : () => {}}
+                              onDelete={isAdmin ? handleDeleteRule : () => {}}
+                            />
                           </div>
                         </div>
                       )
@@ -232,7 +320,7 @@ export default function AutomationsPage() {
             {filteredRooms.map(room => {
               const rules = getRulesForRoom(room.id)
               if (rules.length === 0) return null
-              const active = rules.filter(r => r.isActive).length
+              const active = rules.filter(r => r.flAtivo).length
               return (
                 <div key={room.id} className="rounded-2xl overflow-hidden" style={{ border: '1px solid #e8edf5' }}>
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4" style={{ background: '#f8fafc', borderBottom: '1px solid #e8edf5' }}>
@@ -245,38 +333,15 @@ export default function AutomationsPage() {
                         style={{ background: 'rgba(14,165,160,0.1)', color: '#0ea5a0' }}>
                         {active}/{rules.length} ativas
                       </span>
-                      <button
-                        onClick={() => router.push(`/rooms/${room.id}/automations`)}
-                        className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
-                        style={{ background: 'white', color: '#1e5fa8', border: '1px solid #e2e8f0' }}
-                      >
-                        Gerenciar
-                      </button>
                     </div>
                   </div>
                   <div className="divide-y divide-slate-50">
-                    {rules.map(rule => (
-                      <div key={rule.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-5 py-3.5">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="w-2 h-2 rounded-full shrink-0"
-                            style={{ background: rule.isActive ? '#10c98f' : '#cbd5e1' }} />
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium truncate" style={{ color: '#0f2744' }}>{rule.name}</p>
-                            <p className="text-xs text-slate-400 mt-0.5">
-                              {CONDITION_LABEL[rule.conditionType]}
-                              {rule.conditionType === 'schedule' && ` · ${rule.scheduleStart} – ${rule.scheduleEnd}`}
-                              {rule.conditionType === 'temperature' && ` · ${rule.tempMin}°C – ${rule.tempMax}°C`}
-                            </p>
-                          </div>
-                        </div>
-                        <span className="shrink-0 self-start sm:self-auto text-xs px-2.5 py-1 rounded-full ml-5 sm:ml-4"
-                          style={rule.isActive
-                            ? { background: 'rgba(16,201,143,0.1)', color: '#10c98f' }
-                            : { background: '#f1f5f9', color: '#94a3b8' }}>
-                          {ACTION_LABEL[rule.action]}
-                        </span>
-                      </div>
-                    ))}
+                    <RuleList
+                      rules={rules}
+                      onToggle={isAdmin ? handleToggleRule : () => {}}
+                      onEdit={handleEditRule}
+                      onDelete={handleDeleteRule}
+                    />
                   </div>
                 </div>
               )
@@ -295,8 +360,9 @@ export default function AutomationsPage() {
             onClose={() => {
               setIsFormOpen(false)
               setSelectedClientForRule('')
+              setEditingRule(undefined)
             }}
-            title="Nova Automação"
+            title={editingRule ? 'Editar Automação' : 'Nova Automação'}
           >
             {/* Filtro de cliente (apenas no modo overview) */}
             {isOverviewMode && (
@@ -333,7 +399,9 @@ export default function AutomationsPage() {
                 onCancel={() => {
                   setIsFormOpen(false)
                   setSelectedClientForRule('')
+                  setEditingRule(undefined)
                 }}
+                initialRule={editingRule}
               />
             )}
             
@@ -344,6 +412,31 @@ export default function AutomationsPage() {
               </p>
             )}
           </Modal>
+        )}
+
+        {pendingPasswordAction && (
+          <PasswordConfirmModal
+            title={
+              pendingPasswordAction.type === 'toggle'
+                ? 'Confirmar alteração de estado'
+                : pendingPasswordAction.type === 'delete'
+                ? 'Confirmar exclusão'
+                : 'Confirmar automação'
+            }
+            message={
+              pendingPasswordAction.type === 'toggle'
+                ? 'Digite sua senha para ativar ou desativar esta automação.'
+                : pendingPasswordAction.type === 'delete'
+                ? 'Digite sua senha para excluir esta automação permanentemente.'
+                : 'Digite sua senha para salvar a automação.'
+            }
+            confirmButtonText={
+              pendingPasswordAction.type === 'delete' ? 'Excluir' : 'Confirmar'
+            }
+            isDangerous={pendingPasswordAction.type === 'delete'}
+            onConfirm={handleConfirmPassword}
+            onClose={closePasswordModal}
+          />
         )}
       </div>
     </main>

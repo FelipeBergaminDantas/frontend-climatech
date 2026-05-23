@@ -124,6 +124,38 @@ function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_TOKEN_KEY) ?? sessionStorage.getItem(ACCESS_TOKEN_KEY)
 }
 
+export function extractApiErrorMessage(payload: unknown, fallback: string): string {
+  if (!payload || typeof payload !== 'object') {
+    return fallback
+  }
+  const record = payload as Record<string, unknown>
+  if (typeof record.message === 'string' && record.message.trim()) {
+    return record.message
+  }
+  if (typeof record.detail === 'string' && record.detail.trim()) {
+    return record.detail
+  }
+  if (Array.isArray(record.errors) && record.errors.length > 0) {
+    const first = record.errors[0] as Record<string, unknown>
+    if (typeof first.message === 'string' && first.message.trim()) {
+      return first.message
+    }
+  }
+  return fallback
+}
+
+export async function readApiError(response: Response, fallback: string): Promise<string> {
+  const text = await response.text()
+  if (!text.trim()) {
+    return fallback
+  }
+  try {
+    return extractApiErrorMessage(JSON.parse(text) as unknown, fallback)
+  } catch {
+    return text
+  }
+}
+
 function buildHeaders(contentType = true): Record<string, string> {
   const headers: Record<string, string> = {}
   if (contentType) {
@@ -217,6 +249,164 @@ export async function updateClienteInBackend(id: string, data: Partial<ClienteCr
     console.error('Error updating cliente:', error);
     throw error;
   }
+}
+
+export interface AutomationCreateRequest {
+  id_cliente?: string;
+  id_sala: string;
+  nome_automacao: string;
+  tipo_trigger: 'periodo';
+  fl_somente_dia_util: boolean;
+  fl_segunda: boolean;
+  fl_terca: boolean;
+  fl_quarta: boolean;
+  fl_quinta: boolean;
+  fl_sexta: boolean;
+  fl_sabado: boolean;
+  fl_domingo: boolean;
+  hora_inicio: string;
+  hora_fim: string;
+  prioridade: number;
+}
+
+export interface AutomationUpdateRequest {
+  nome_automacao?: string;
+  fl_somente_dia_util?: boolean;
+  fl_segunda?: boolean;
+  fl_terca?: boolean;
+  fl_quarta?: boolean;
+  fl_quinta?: boolean;
+  fl_sexta?: boolean;
+  fl_sabado?: boolean;
+  fl_domingo?: boolean;
+  hora_inicio?: string;
+  hora_fim?: string;
+  prioridade?: number;
+  fl_ativo?: boolean;
+}
+
+export interface AutomationResponse {
+  id_automacao: string;
+  id_cliente: string;
+  id_sala: string;
+  nome_automacao: string;
+  tipo_trigger: 'periodo' | 'temperatura';
+  fl_ativo: boolean;
+  temperatura_alvo?: number | null;
+  fl_somente_dia_util: boolean;
+  fl_segunda: boolean;
+  fl_terca: boolean;
+  fl_quarta: boolean;
+  fl_quinta: boolean;
+  fl_sexta: boolean;
+  fl_sabado: boolean;
+  fl_domingo: boolean;
+  hora_inicio: string;
+  hora_fim: string;
+  prioridade: number;
+  dth_created_at: string;
+  dth_updated_at: string;
+}
+
+export interface AutomationStateResponse {
+  id_automacao: string;
+  fl_em_execucao: boolean;
+  comando_enviado?: string;
+  dth_inicio_execucao?: string;
+  dth_fim_execucao?: string;
+  dth_ultima_execucao?: string;
+  status?: string;
+}
+
+export async function getAutomationsFromBackend(clientId?: string, salaId?: string): Promise<AutomationResponse[]> {
+  const params = new URLSearchParams()
+  if (clientId) params.set('client_id', clientId)
+  if (salaId) params.set('sala_id', salaId)
+  const query = params.toString() ? `?${params.toString()}` : ''
+  const response = await fetch(`${API_BASE_URL}/automacoes${query}`, {
+    method: 'GET',
+    headers: buildHeaders(false),
+  })
+  if (!response.ok) throw new Error('Failed to fetch automations')
+  const result: ApiResponse<AutomationResponse[]> = await response.json()
+  return result.data
+}
+
+export async function createAutomationInBackend(data: AutomationCreateRequest): Promise<AutomationResponse> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/automacoes`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(data),
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || `Failed to create automation: ${response.status} ${response.statusText}`)
+    }
+    const result: ApiResponse<AutomationResponse> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('Error creating automation:', error)
+    if (error instanceof TypeError) {
+      throw new Error('Falha ao conectar com o backend. Verifique se o servidor está rodando e se a origem está liberada pelo CORS.')
+    }
+    throw error
+  }
+}
+
+export async function updateAutomationInBackend(id: string, data: AutomationUpdateRequest): Promise<AutomationResponse> {
+  const response = await fetch(`${API_BASE_URL}/automacoes/${id}`, {
+    method: 'PUT',
+    headers: buildHeaders(),
+    credentials: 'include',
+    body: JSON.stringify(data),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to update automation')
+  }
+  const result: ApiResponse<AutomationResponse> = await response.json()
+  return result.data
+}
+
+export async function toggleAutomationInBackend(id: string): Promise<AutomationResponse> {
+  const response = await fetch(`${API_BASE_URL}/automacoes/${id}/toggle`, {
+    method: 'PATCH',
+    headers: buildHeaders(),
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to toggle automation')
+  }
+  const result: ApiResponse<AutomationResponse> = await response.json()
+  return result.data
+}
+
+export async function deleteAutomationInBackend(id: string): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/automacoes/${id}`, {
+    method: 'DELETE',
+    headers: buildHeaders(),
+    credentials: 'include',
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to delete automation')
+  }
+}
+
+export async function getAutomationStatesFromBackend(salaId: string): Promise<AutomationStateResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/automacoes/states?sala_id=${encodeURIComponent(salaId)}`, {
+    method: 'GET',
+    headers: buildHeaders(false),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to fetch automation states')
+  }
+  const result: ApiResponse<AutomationStateResponse[]> = await response.json()
+  return result.data
 }
 
 /**
@@ -462,8 +652,7 @@ export async function updateSalaInBackend(id: string, data: SalaUpdateRequest): 
   })
 
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.message || 'Failed to update sala')
+    throw new Error(await readApiError(response, 'Falha ao atualizar a sala'))
   }
 
   const result: ApiResponse<SalaResponse> = await response.json()

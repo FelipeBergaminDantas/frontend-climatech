@@ -1,7 +1,6 @@
 'use client'
 
 import { use, useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
@@ -9,7 +8,7 @@ import { useAutomations } from '@/contexts/AutomationsContext'
 import { RuleList } from '@/components/automation/RuleList'
 import { RuleForm } from '@/components/automation/RuleForm'
 import { Modal } from '@/components/ui/Modal'
-import { getAllClients, getClientName } from '@/services/clientService'
+import { getAllClients } from '@/services/clientService'
 import type { AutomationRule, Client } from '@/types'
 
 interface PageProps {
@@ -18,10 +17,9 @@ interface PageProps {
 
 export default function AutomationsPage({ params }: PageProps) {
   const { id } = use(params)
-  const router = useRouter()
   const { isAuthenticated, isLoading: authLoading, user } = useAuth()
   const { rooms } = useRooms()
-  const { getRulesForRoom, toggleRule, createRule, updateRule, deleteRule } = useAutomations()
+  const { getRulesForRoom, toggleRule, createRule, updateRule, deleteRule, loadRules, loadStates } = useAutomations()
 
   const room = rooms.find(r => r.id === id)
   const isAdmin = user?.role === 'admin_master' || user?.role === 'admin_client'
@@ -33,6 +31,17 @@ export default function AutomationsPage({ params }: PageProps) {
   const [selectedClientForRoom, setSelectedClientForRoom] = useState<string>('')
   
   const isOverviewMode = user?.role === 'admin_master' && !user?.selectedClientId
+
+  useEffect(() => {
+    if (!id) return
+
+    async function loadRoomData() {
+      await loadRules(id)
+      await loadStates(id)
+    }
+
+    loadRoomData()
+  }, [id, loadRules, loadStates])
   
   useEffect(() => {
     if (isOverviewMode) {
@@ -42,11 +51,11 @@ export default function AutomationsPage({ params }: PageProps) {
 
   if (!isAuthenticated && !authLoading) return null
 
-  function handleSave(rule: AutomationRule) {
+  async function handleSave(rule: AutomationRule) {
     if (editingRule) {
-      updateRule(editingRule.id, rule)
+      await updateRule(editingRule.id, rule)
     } else {
-      createRule(rule)
+      await createRule(rule)
     }
     setIsFormOpen(false)
     setEditingRule(undefined)

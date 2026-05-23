@@ -27,6 +27,7 @@ export default function RoomsPage() {
     room: Room
     draft?: Room
   } | null>(null)
+  const [roomSaveError, setRoomSaveError] = useState<string | null>(null)
   const [filterClient, setFilterClient] = useState<string>('all')
 
   const isAdmin = user?.role === 'admin_master' || user?.role === 'admin_client'
@@ -70,6 +71,7 @@ export default function RoomsPage() {
 
   async function handleEditSave(roomData: Room) {
     if (!editingRoom) return
+    setRoomSaveError(null)
     setRoomActionPayload({ type: 'edit', room: editingRoom, draft: roomData })
   }
 
@@ -84,10 +86,12 @@ export default function RoomsPage() {
 
     await verifyCurrentPassword(password)
 
+    const payload = roomActionPayload
+
     try {
-      if (roomActionPayload.type === 'edit' && roomActionPayload.draft) {
-        const roomData = roomActionPayload.draft
-        await updateRoom(roomActionPayload.room.id, {
+      if (payload.type === 'edit' && payload.draft) {
+        const roomData = payload.draft
+        await updateRoom(payload.room.id, {
           name: roomData.name,
           deviceId: roomData.deviceId,
           location: roomData.location,
@@ -95,17 +99,30 @@ export default function RoomsPage() {
           idealTempMax: roomData.idealTempMax,
           targetTemp: roomData.targetTemp,
         })
+        setRoomSaveError(null)
         setEditingRoom(null)
+        setRoomActionPayload(null)
+        return
       }
 
-      if (roomActionPayload.type === 'delete') {
-        await deleteRoom(roomActionPayload.room.id)
+      if (payload.type === 'delete') {
+        await deleteRoom(payload.room.id)
+        setRoomActionPayload(null)
+        return
       }
     } catch (error) {
       console.error('Falha na ação da sala:', error)
-      throw error instanceof Error ? error : new Error('Falha ao confirmar a ação. Tente novamente.')
-    } finally {
-      setRoomActionPayload(null)
+      const message = error instanceof Error
+        ? error.message
+        : 'Falha ao confirmar a ação. Tente novamente.'
+
+      if (payload.type === 'edit') {
+        setRoomSaveError(message)
+        setRoomActionPayload(null)
+        return
+      }
+
+      throw error instanceof Error ? error : new Error(message)
     }
   }
 
@@ -211,12 +228,23 @@ export default function RoomsPage() {
         )}
 
         {editingRoom && (
-          <Modal isOpen={!!editingRoom} onClose={() => setEditingRoom(null)} title="Editar sala">
+          <Modal
+            isOpen={!!editingRoom}
+            onClose={() => {
+              setEditingRoom(null)
+              setRoomSaveError(null)
+            }}
+            title="Editar sala"
+          >
             <RoomForm
               userId={user?.id ?? editingRoom.userId}
               initialRoom={editingRoom}
+              serverError={roomSaveError}
               onSave={handleEditSave}
-              onCancel={() => setEditingRoom(null)}
+              onCancel={() => {
+                setEditingRoom(null)
+                setRoomSaveError(null)
+              }}
             />
           </Modal>
         )}

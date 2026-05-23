@@ -71,20 +71,37 @@ export interface TemperatureReading {
 
 export interface AutomationRule {
   id: string;
+  clientId: string;
   roomId: string;
-  name: string;
-  conditionType: 'schedule' | 'temperature';
-  scheduleStart?: string;
-  scheduleEnd?: string;
-  tempMin?: number;
-  tempMax?: number;
-  action: AutomationAction;
-  targetTemp?: number;
-  isActive: boolean;
+  nomeAutomacao: string;
+  tipoTrigger: 'periodo' | 'temperatura';
+  flAtivo: boolean;
+  temperaturaAlvo?: number | null;
+  flSomenteDiaUtil: boolean;
+  flSegunda: boolean;
+  flTerca: boolean;
+  flQuarta: boolean;
+  flQuinta: boolean;
+  flSexta: boolean;
+  flSabado: boolean;
+  flDomingo: boolean;
+  horaInicio: string;
+  horaFim: string;
+  prioridade: number;
   createdAt: string;
+  updatedAt: string;
+  runtimeStatus?: string;
 }
 
-export type AutomationAction = 'turn_on' | 'turn_off' | 'set_temp';
+export interface AutomationState {
+  idAutomacao: string;
+  flEmExecucao: boolean;
+  comandoEnviado?: string;
+  dthInicioExecucao?: string;
+  dthFimExecucao?: string;
+  dthUltimaExecucao?: string;
+  status?: string;
+}
 
 export interface AutomationLog {
   id: string;

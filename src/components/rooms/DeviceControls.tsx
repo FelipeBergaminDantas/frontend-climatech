@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { DeviceState } from '@/types'
 import { sendCommand } from '@/services/deviceService'
+import { useRooms } from '@/contexts/RoomsContext'
 
 interface DeviceControlsProps {
   roomId: string
@@ -12,34 +13,64 @@ interface DeviceControlsProps {
 }
 
 export function DeviceControls({ roomId, state, onUpdate, isAdmin = false }: DeviceControlsProps) {
-  const [draft, setDraft] = useState<DeviceState>(state)
+  const { rooms, updateRoom, patchRoomLocally } = useRooms()
+  const room = rooms.find((item) => item.id === roomId)
+  const persistedTargetTemp = room?.targetTemp ?? state.targetTemp
+
+  const [draft, setDraft] = useState<DeviceState>({
+    ...state,
+    targetTemp: persistedTargetTemp ?? state.targetTemp,
+  })
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [tempError, setTempError] = useState<string | null>(null)
 
-  const isDirty = isAdmin && JSON.stringify(draft) !== JSON.stringify(state)
+  useEffect(() => {
+    setDraft({
+      ...state,
+      targetTemp: persistedTargetTemp ?? state.targetTemp,
+    })
+  }, [state, persistedTargetTemp])
+
+  const targetTempChanged = Number(draft.targetTemp) !== Number(persistedTargetTemp)
+  const isDirty = isAdmin && (draft.isOn !== state.isOn || targetTempChanged)
 
   function showToast(type: 'success' | 'error', msg: string) {
     setToast({ type, msg })
-    setTimeout(() => setToast(null), 3000)
+    setTimeout(() => setToast(null), 5000)
   }
 
   async function handleSave() {
     setSaving(true)
+    setTempError(null)
+    const tempChanged = targetTempChanged
+
     try {
-      let current = state
+      let current = { ...draft }
+
+      if (tempChanged) {
+        await updateRoom(roomId, { targetTemp: draft.targetTemp })
+        patchRoomLocally(roomId, { targetTemp: draft.targetTemp })
+      }
 
       if (draft.isOn !== state.isOn) {
         current = await sendCommand(roomId, { command: 'set_power', value: draft.isOn ? 'on' : 'off' })
-      }
-      if (draft.targetTemp !== state.targetTemp) {
-        current = await sendCommand(roomId, { command: 'set_temp', value: draft.targetTemp })
+        if (tempChanged) {
+          current = { ...current, targetTemp: draft.targetTemp }
+        }
       }
 
       setDraft(current)
       onUpdate(current)
       showToast('success', 'Configurações salvas com sucesso.')
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Erro ao salvar.')
+      const message = err instanceof Error ? err.message : 'Erro ao salvar.'
+
+      if (tempChanged) {
+        setTempError(message)
+      }
+
+      showToast('error', message)
     } finally {
       setSaving(false)
     }
@@ -86,9 +117,22 @@ export function DeviceControls({ roomId, state, onUpdate, isAdmin = false }: Dev
       {/* Setpoint */}
       <div>
         <p className="font-medium text-sm mb-3" style={{ color: '#0f2744' }}>Temperatura alvo (setpoint)</p>
+        {tempError && (
+          <div
+            role="alert"
+            className="mb-3 rounded-xl px-4 py-3 text-sm"
+            style={{ background: 'rgba(239,68,68,0.08)', color: '#b91c1c', border: '1px solid rgba(239,68,68,0.25)' }}
+          >
+            {tempError}
+          </div>
+        )}
         <div className="flex items-center gap-4">
           <button
-            onClick={() => setDraft(d => ({ ...d, targetTemp: Math.max(16, d.targetTemp - 1) }))}
+            onClick={() => {
+              if (!isAdmin) return
+              setTempError(null)
+              setDraft(d => ({ ...d, targetTemp: Math.max(16, d.targetTemp - 1) }))
+            }}
             disabled={!isAdmin || draft.targetTemp <= 16}
             className="w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             style={{ background: '#f0f4f8', color: '#0f2744', border: '1px solid #e2e8f0' }}
@@ -99,7 +143,11 @@ export function DeviceControls({ roomId, state, onUpdate, isAdmin = false }: Dev
             {draft.targetTemp}°C
           </span>
           <button
-            onClick={() => setDraft(d => ({ ...d, targetTemp: Math.min(30, d.targetTemp + 1) }))}
+            onClick={() => {
+              if (!isAdmin) return
+              setTempError(null)
+              setDraft(d => ({ ...d, targetTemp: Math.min(30, d.targetTemp + 1) }))
+            }}
             disabled={!isAdmin || draft.targetTemp >= 30}
             className="w-9 h-9 rounded-xl flex items-center justify-center text-lg font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
             style={{ background: '#f0f4f8', color: '#0f2744', border: '1px solid #e2e8f0' }}
@@ -109,11 +157,17 @@ export function DeviceControls({ roomId, state, onUpdate, isAdmin = false }: Dev
         </div>
         <input
           type="range" min={16} max={30} value={draft.targetTemp}
-          onChange={e => isAdmin && setDraft(d => ({ ...d, targetTemp: Number(e.target.value) }))}
+          onChange={e => {
+            if (!isAdmin) return
+            setTempError(null)
+            setDraft(d => ({ ...d, targetTemp: Number(e.target.value) }))
+          }}
           disabled={!isAdmin}
           className="w-full mt-3 disabled:cursor-not-allowed"
           style={{ accentColor: '#1e5fa8' }}
           aria-label="Temperatura alvo"
+          aria-invalid={Boolean(tempError)}
+          aria-describedby={tempError ? 'target-temp-error' : undefined}
         />
         <div className="flex justify-between text-xs text-slate-400 mt-1">
           <span>16°C</span><span>30°C</span>
@@ -133,7 +187,10 @@ export function DeviceControls({ roomId, state, onUpdate, isAdmin = false }: Dev
           </button>
           {isDirty && !saving && (
             <button
-              onClick={() => setDraft(state)}
+              onClick={() => {
+                setTempError(null)
+                setDraft({ ...state, targetTemp: persistedTargetTemp ?? state.targetTemp })
+              }}
               className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all"
               style={{ background: '#f0f4f8', color: '#64748b', border: '1px solid #e2e8f0' }}
             >

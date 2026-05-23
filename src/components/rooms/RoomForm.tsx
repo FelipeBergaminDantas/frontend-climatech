@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Room } from '@/types'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
@@ -26,6 +26,7 @@ interface RoomFormProps {
   onSave: (room: Room) => Promise<void>
   onCancel: () => void
   initialRoom?: Room
+  serverError?: string | null
 }
 
 interface FormErrors {
@@ -37,7 +38,12 @@ interface FormErrors {
   targetTemp?: string
 }
 
-export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProps) {
+function isAutomationTempError(message: string): boolean {
+  const lower = message.toLowerCase()
+  return lower.includes('automa') || lower.includes('temperatura')
+}
+
+export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }: RoomFormProps) {
   const isEditing = Boolean(initialRoom)
   const [name, setName] = useState(initialRoom?.name ?? '')
   const [deviceId, setDeviceId] = useState(initialRoom?.deviceId ?? buildDefaultCtnrNodeId())
@@ -50,6 +56,15 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
   const [targetTemp, setTargetTemp] = useState(initialRoom?.targetTemp?.toString() ?? '')
   const [errors, setErrors] = useState<FormErrors>({})
   const [isLoading, setIsLoading] = useState(false)
+
+  useEffect(() => {
+    if (!serverError) return
+    if (isAutomationTempError(serverError)) {
+      setErrors((prev) => ({ ...prev, targetTemp: serverError }))
+    } else {
+      setErrors((prev) => ({ ...prev, name: serverError }))
+    }
+  }, [serverError])
 
   function updateCtncNodes(count: number) {
     setCtncNodeIds((prev) => {
@@ -188,9 +203,11 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
       await onSave(roomData)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Erro ao salvar sala.'
-      if (msg.toLowerCase().includes('identificador') || msg.toLowerCase().includes('ctn-r')) {
+      if (isAutomationTempError(msg)) {
+        setErrors((prev) => ({ ...prev, targetTemp: msg }))
+      } else if (lower.includes('identificador') || lower.includes('ctn-r')) {
         setErrors((prev) => ({ ...prev, deviceId: msg }))
-      } else if (msg.toLowerCase().includes('ctn-c')) {
+      } else if (lower.includes('ctn-c')) {
         setErrors((prev) => ({ ...prev, acCount: msg }))
       } else {
         setErrors((prev) => ({ ...prev, name: msg }))
@@ -202,6 +219,15 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom }: RoomFormProp
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+      {serverError && (
+        <div
+          role="alert"
+          className="rounded-xl px-4 py-3 text-sm"
+          style={{ background: 'rgba(239,68,68,0.08)', color: '#b91c1c', border: '1px solid rgba(239,68,68,0.25)' }}
+        >
+          {serverError}
+        </div>
+      )}
       <Input
         label="Nome da sala"
         id="room-name"

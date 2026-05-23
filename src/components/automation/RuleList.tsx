@@ -11,12 +11,6 @@ interface RuleListProps {
   onDelete: (id: string) => void
 }
 
-const actionLabels: Record<AutomationRule['action'], string> = {
-  turn_on: 'Ligar',
-  turn_off: 'Desligar',
-  set_temp: 'Ajustar temperatura',
-}
-
 export function RuleList({ rules, onToggle, onEdit, onDelete }: RuleListProps) {
   if (rules.length === 0) {
     return (
@@ -33,51 +27,48 @@ export function RuleList({ rules, onToggle, onEdit, onDelete }: RuleListProps) {
       {rules.map((rule) => (
         <li key={rule.id}>
           <Card>
-            <div className="flex items-start justify-between gap-4">
-              {/* Info */}
-              <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium text-gray-900 dark:text-gray-100 truncate">
-                    {rule.name}
+                    {rule.nomeAutomacao}
                   </span>
                   <span
                     className={[
                       'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                      rule.isActive
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      rule.flAtivo
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
                         : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400',
                     ].join(' ')}
                   >
-                    {rule.isActive ? 'Ativa' : 'Inativa'}
+                    {rule.flAtivo ? 'Ativa' : 'Inativa'}
                   </span>
                 </div>
 
                 <p className="text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-medium">Condição:</span>{' '}
-                  {rule.conditionType === 'schedule'
-                    ? `Horário — ${rule.scheduleStart} às ${rule.scheduleEnd}`
-                    : `Temperatura — ${rule.tempMin}°C a ${rule.tempMax}°C`}
+                  {rule.tipoTrigger === 'periodo'
+                    ? `Horário — ${rule.horaInicio} às ${rule.horaFim}`
+                    : rule.temperaturaAlvo != null
+                      ? `Temperatura — ${rule.temperaturaAlvo}°C`
+                      : 'Temperatura'}
                 </p>
 
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  <span className="font-medium">Ação:</span>{' '}
-                  {actionLabels[rule.action]}
-                  {rule.action === 'set_temp' && rule.targetTemp !== undefined
-                    ? ` (${rule.targetTemp}°C)`
-                    : ''}
-                </p>
+                {rule.runtimeStatus && (
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    {rule.runtimeStatus}
+                  </p>
+                )}
               </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 flex-wrap sm:shrink-0">
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => onToggle(rule.id)}
-                  aria-label={rule.isActive ? 'Desativar regra' : 'Ativar regra'}
-                  title={rule.isActive ? 'Desativar' : 'Ativar'}
+                  aria-label={rule.flAtivo ? 'Desativar regra' : 'Ativar regra'}
+                  title={rule.flAtivo ? 'Desativar' : 'Ativar'}
                 >
-                  {rule.isActive ? (
+                  {rule.flAtivo ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>

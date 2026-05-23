@@ -56,6 +56,15 @@ export function PasswordConfirmModal({
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div
+              role="alert"
+              className="rounded-xl px-4 py-3 text-sm"
+              style={{ background: 'rgba(239,68,68,0.08)', color: '#b91c1c', border: '1px solid rgba(239,68,68,0.25)' }}
+            >
+              {error}
+            </div>
+          )}
           <div>
             <label htmlFor="password-confirm" className="block text-sm font-medium" style={{ color: '#0f2744' }}>
               Sua senha

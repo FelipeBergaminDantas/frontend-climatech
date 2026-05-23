@@ -1,181 +1,148 @@
-import type {
-  AutomationRule,
-  AutomationLog,
-  DeviceState,
-} from '@/types';
-import { validateTempRange, validateSchedule } from '@/utils/validators';
-import { sendCommand } from './deviceService';
+import type { AutomationRule, AutomationState } from '@/types'
+import {
+  createAutomationInBackend,
+  deleteAutomationInBackend,
+  getAutomationStatesFromBackend,
+  getAutomationsFromBackend,
+  toggleAutomationInBackend,
+  updateAutomationInBackend,
+} from '@/services/apiService'
+import { verifyCurrentPassword } from '@/services/userService'
 
-// In-memory stores — TODO: Replace with API calls to backend
-let rules: AutomationRule[] = [];
-let logs: AutomationLog[] = [];
-
-export function getRules(roomId: string): AutomationRule[] {
-  return rules.filter((r) => r.roomId === roomId);
-}
-
-export function getRuleById(id: string): AutomationRule | undefined {
-  return rules.find((r) => r.id === id);
-}
-
-function validateRuleConditions(
-  data: Omit<AutomationRule, 'id' | 'createdAt'>
-): void {
-  if (data.conditionType === 'temperature') {
-    if (data.tempMin === undefined || data.tempMax === undefined) {
-      throw new Error('Condição de temperatura requer tempMin e tempMax.');
-    }
-    validateTempRange(data.tempMin, data.tempMax);
+export function mapAutomationResponse(automation: any): AutomationRule {
+  return {
+    id: automation.id_automacao,
+    clientId: automation.id_cliente,
+    roomId: automation.id_sala,
+    nomeAutomacao: automation.nome_automacao,
+    tipoTrigger: automation.tipo_trigger,
+    flAtivo: automation.fl_ativo,
+    temperaturaAlvo: automation.temperatura_alvo ?? null,
+    flSomenteDiaUtil: automation.fl_somente_dia_util,
+    flSegunda: automation.fl_segunda,
+    flTerca: automation.fl_terca,
+    flQuarta: automation.fl_quarta,
+    flQuinta: automation.fl_quinta,
+    flSexta: automation.fl_sexta,
+    flSabado: automation.fl_sabado,
+    flDomingo: automation.fl_domingo,
+    horaInicio: automation.hora_inicio,
+    horaFim: automation.hora_fim,
+    prioridade: automation.prioridade,
+    createdAt: automation.dth_created_at,
+    updatedAt: automation.dth_updated_at,
+    runtimeStatus: undefined,
   }
+}
 
-  if (data.conditionType === 'schedule') {
-    if (data.scheduleStart === undefined || data.scheduleEnd === undefined) {
-      throw new Error('Condição de horário requer scheduleStart e scheduleEnd.');
-    }
-    validateSchedule(data.scheduleStart, data.scheduleEnd);
+export function mapStateResponse(state: any): AutomationState {
+  return {
+    idAutomacao: state.id_automacao,
+    flEmExecucao: state.fl_em_execucao,
+    comandoEnviado: state.comando_enviado,
+    dthInicioExecucao: state.dth_inicio_execucao,
+    dthFimExecucao: state.dth_fim_execucao,
+    dthUltimaExecucao: state.dth_ultima_execucao,
+    status: state.status,
   }
 }
 
-function detectConflict(
-  newRule: Omit<AutomationRule, 'id' | 'createdAt'>,
-  excludeId?: string
-): AutomationRule | undefined {
-  const roomRules = rules.filter(
-    (r) => r.roomId === newRule.roomId && r.isActive && r.id !== excludeId
-  );
-
-  for (const existing of roomRules) {
-    if (
-      existing.conditionType === newRule.conditionType &&
-      existing.action === newRule.action
-    ) {
-      // Same type + same action = conflict
-      return existing;
-    }
+async function verifyPassword(password?: string): Promise<void> {
+  if (!password) {
+    throw new Error('Senha não informada.')
   }
-  return undefined;
+  await verifyCurrentPassword(password)
 }
 
-export function createRule(
-  data: Omit<AutomationRule, 'id' | 'createdAt'>
-): { rule: AutomationRule; conflict?: AutomationRule } {
-  validateRuleConditions(data);
-
-  const conflict = detectConflict(data);
-
-  const newRule: AutomationRule = {
-    ...data,
-    id: `rule-${Date.now()}`,
-    createdAt: new Date().toISOString(),
-  };
-
-  rules.push(newRule);
-  return { rule: newRule, conflict };
+export async function fetchAutomations(clientId?: string, roomId?: string): Promise<AutomationRule[]> {
+  const backendRules = await getAutomationsFromBackend(clientId, roomId)
+  return backendRules.map(mapAutomationResponse)
 }
 
-export function updateRule(
-  id: string,
-  data: Partial<Omit<AutomationRule, 'id' | 'createdAt'>>
-): AutomationRule {
-  const index = rules.findIndex((r) => r.id === id);
-  if (index === -1) {
-    throw new Error('Regra não encontrada.');
+export async function fetchAutomationStates(roomId: string): Promise<AutomationState[]> {
+  const states = await getAutomationStatesFromBackend(roomId)
+  return states.map(mapStateResponse)
+}
+
+export async function createRule(payload: {
+  clientId?: string
+  roomId: string
+  nomeAutomacao: string
+  flSomenteDiaUtil: boolean
+  flSegunda: boolean
+  flTerca: boolean
+  flQuarta: boolean
+  flQuinta: boolean
+  flSexta: boolean
+  flSabado: boolean
+  flDomingo: boolean
+  horaInicio: string
+  horaFim: string
+  prioridade: number
+}, password?: string): Promise<AutomationRule> {
+  await verifyPassword(password)
+  const data = {
+    id_cliente: payload.clientId,
+    id_sala: payload.roomId,
+    nome_automacao: payload.nomeAutomacao,
+    tipo_trigger: 'periodo' as const,
+    fl_somente_dia_util: payload.flSomenteDiaUtil,
+    fl_segunda: payload.flSegunda,
+    fl_terca: payload.flTerca,
+    fl_quarta: payload.flQuarta,
+    fl_quinta: payload.flQuinta,
+    fl_sexta: payload.flSexta,
+    fl_sabado: payload.flSabado,
+    fl_domingo: payload.flDomingo,
+    hora_inicio: payload.horaInicio,
+    hora_fim: payload.horaFim,
+    prioridade: payload.prioridade,
   }
-
-  const updated = { ...rules[index], ...data };
-  validateRuleConditions(updated);
-
-  rules[index] = updated;
-  return { ...updated };
+  const result = await createAutomationInBackend(data)
+  return mapAutomationResponse(result)
 }
 
-export function deleteRule(id: string): void {
-  const index = rules.findIndex((r) => r.id === id);
-  if (index === -1) {
-    throw new Error('Regra não encontrada.');
-  }
-  rules.splice(index, 1);
+export async function updateRule(id: string, payload: {
+  nomeAutomacao?: string
+  flSomenteDiaUtil?: boolean
+  flSegunda?: boolean
+  flTerca?: boolean
+  flQuarta?: boolean
+  flQuinta?: boolean
+  flSexta?: boolean
+  flSabado?: boolean
+  flDomingo?: boolean
+  horaInicio?: string
+  horaFim?: string
+  prioridade?: number
+  flAtivo?: boolean
+}, password?: string): Promise<AutomationRule> {
+  await verifyPassword(password)
+  const data: Record<string, any> = {}
+  if (payload.nomeAutomacao !== undefined) data.nome_automacao = payload.nomeAutomacao
+  if (payload.flSomenteDiaUtil !== undefined) data.fl_somente_dia_util = payload.flSomenteDiaUtil
+  if (payload.flSegunda !== undefined) data.fl_segunda = payload.flSegunda
+  if (payload.flTerca !== undefined) data.fl_terca = payload.flTerca
+  if (payload.flQuarta !== undefined) data.fl_quarta = payload.flQuarta
+  if (payload.flQuinta !== undefined) data.fl_quinta = payload.flQuinta
+  if (payload.flSexta !== undefined) data.fl_sexta = payload.flSexta
+  if (payload.flSabado !== undefined) data.fl_sabado = payload.flSabado
+  if (payload.flDomingo !== undefined) data.fl_domingo = payload.flDomingo
+  if (payload.horaInicio !== undefined) data.hora_inicio = payload.horaInicio
+  if (payload.horaFim !== undefined) data.hora_fim = payload.horaFim
+  if (payload.prioridade !== undefined) data.prioridade = payload.prioridade
+  if (payload.flAtivo !== undefined) data.fl_ativo = payload.flAtivo
+  const result = await updateAutomationInBackend(id, data)
+  return mapAutomationResponse(result)
 }
 
-export function toggleRule(id: string): AutomationRule {
-  const index = rules.findIndex((r) => r.id === id);
-  if (index === -1) {
-    throw new Error('Regra não encontrada.');
-  }
-  rules[index] = { ...rules[index], isActive: !rules[index].isActive };
-  return { ...rules[index] };
+export async function toggleRule(id: string, password?: string): Promise<AutomationRule> {
+  await verifyPassword(password)
+  const result = await toggleAutomationInBackend(id)
+  return mapAutomationResponse(result)
 }
 
-function timeToMinutes(hhmm: string): number {
-  const [h, m] = hhmm.split(':').map(Number);
-  return h * 60 + m;
-}
-
-function getCurrentTimeMinutes(): number {
-  const now = new Date();
-  return now.getHours() * 60 + now.getMinutes();
-}
-
-export async function evaluateRules(
-  roomId: string,
-  deviceState: DeviceState
-): Promise<AutomationLog[]> {
-  const activeRules = rules.filter((r) => r.roomId === roomId && r.isActive);
-  const newLogs: AutomationLog[] = [];
-
-  for (const rule of activeRules) {
-    let conditionMet = false;
-
-    if (rule.conditionType === 'schedule') {
-      const start = timeToMinutes(rule.scheduleStart!);
-      const end = timeToMinutes(rule.scheduleEnd!);
-      const now = getCurrentTimeMinutes();
-      conditionMet = now >= start && now < end;
-    } else if (rule.conditionType === 'temperature') {
-      conditionMet =
-        deviceState.currentTemp >= rule.tempMin! &&
-        deviceState.currentTemp <= rule.tempMax!;
-    }
-
-    if (!conditionMet) continue;
-
-    let success = false;
-    try {
-      if (rule.action === 'turn_on') {
-        await sendCommand(roomId, { command: 'set_power', value: 'on' });
-      } else if (rule.action === 'turn_off') {
-        await sendCommand(roomId, { command: 'set_power', value: 'off' });
-      } else if (rule.action === 'set_temp' && rule.targetTemp !== undefined) {
-        await sendCommand(roomId, { command: 'set_temp', value: rule.targetTemp });
-      }
-      success = true;
-    } catch {
-      success = false;
-    }
-
-    const log: AutomationLog = {
-      id: `log-${Date.now()}-${rule.id}`,
-      ruleId: rule.id,
-      roomId,
-      executedAt: new Date().toISOString(),
-      action: rule.action,
-      success,
-    };
-
-    logs.push(log);
-    newLogs.push(log);
-  }
-
-  return newLogs;
-}
-
-export function getLogs(roomId?: string): AutomationLog[] {
-  if (roomId) return logs.filter((l) => l.roomId === roomId);
-  return [...logs];
-}
-
-/** Reset store — used in tests */
-export function _resetRules(): void {
-  rules = [];
-  logs = [];
+export async function deleteRule(id: string, password?: string): Promise<void> {
+  await verifyPassword(password)
+  await deleteAutomationInBackend(id)
 }
