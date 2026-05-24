@@ -9,6 +9,44 @@ import {
 } from '@/services/apiService'
 import { verifyCurrentPassword } from '@/services/userService'
 
+/** Converte timestamp da API para ISO exibível em Brasília (mantém −03:00 se já vier assim). */
+function formatBrazilTimestamp(value: string | null | undefined): string | undefined {
+  if (!value) return undefined
+  const raw = String(value).trim()
+  if (raw.includes('-03:00') || raw.includes('-03:')) return raw
+  const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'))
+  if (Number.isNaN(parsed.getTime())) return raw
+  const parts = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).formatToParts(parsed)
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00'
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}-03:00`
+}
+
+/** Converte hora do backend (TIME ou timestamptz) para HH:MM em Brasília. */
+function formatScheduleTime(value: string | null | undefined): string {
+  if (!value) return ''
+  const raw = String(value).trim()
+  if (!raw.includes('T') && !raw.includes(' ')) {
+    return raw.slice(0, 5)
+  }
+  const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'))
+  if (Number.isNaN(parsed.getTime())) return raw.slice(0, 5)
+  return parsed.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 export function mapAutomationResponse(automation: any): AutomationRule {
   return {
     id: automation.id_automacao,
@@ -26,11 +64,11 @@ export function mapAutomationResponse(automation: any): AutomationRule {
     flSexta: automation.fl_sexta,
     flSabado: automation.fl_sabado,
     flDomingo: automation.fl_domingo,
-    horaInicio: automation.hora_inicio,
-    horaFim: automation.hora_fim,
+    horaInicio: formatScheduleTime(automation.hora_inicio),
+    horaFim: formatScheduleTime(automation.hora_fim),
     prioridade: automation.prioridade,
-    createdAt: automation.dth_created_at,
-    updatedAt: automation.dth_updated_at,
+    createdAt: formatBrazilTimestamp(automation.dth_created_at) ?? automation.dth_created_at,
+    updatedAt: formatBrazilTimestamp(automation.dth_updated_at) ?? automation.dth_updated_at,
     runtimeStatus: undefined,
   }
 }
@@ -40,9 +78,9 @@ export function mapStateResponse(state: any): AutomationState {
     idAutomacao: state.id_automacao,
     flEmExecucao: state.fl_em_execucao,
     comandoEnviado: state.comando_enviado,
-    dthInicioExecucao: state.dth_inicio_execucao,
-    dthFimExecucao: state.dth_fim_execucao,
-    dthUltimaExecucao: state.dth_ultima_execucao,
+    dthInicioExecucao: formatBrazilTimestamp(state.dth_inicio_execucao),
+    dthFimExecucao: formatBrazilTimestamp(state.dth_fim_execucao),
+    dthUltimaExecucao: formatBrazilTimestamp(state.dth_ultima_execucao),
     status: state.status,
   }
 }
