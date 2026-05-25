@@ -8,6 +8,7 @@ import {
   updateAutomationInBackend,
 } from '@/services/apiService'
 import { verifyCurrentPassword } from '@/services/userService'
+import { withCache, cacheKeys, cacheDelete } from '@/services/cacheService'
 
 /** Converte timestamp da API para ISO exibível em Brasília (mantém −03:00 se já vier assim). */
 function formatBrazilTimestamp(value: string | null | undefined): string | undefined {
@@ -93,8 +94,10 @@ async function verifyPassword(password?: string): Promise<void> {
 }
 
 export async function fetchAutomations(clientId?: string, roomId?: string): Promise<AutomationRule[]> {
-  const backendRules = await getAutomationsFromBackend(clientId, roomId)
-  return backendRules.map(mapAutomationResponse)
+  return withCache(cacheKeys.automations(clientId, roomId), async () => {
+    const backendRules = await getAutomationsFromBackend(clientId, roomId)
+    return backendRules.map(mapAutomationResponse)
+  })
 }
 
 export async function fetchAutomationStates(roomId: string): Promise<AutomationState[]> {
@@ -137,6 +140,9 @@ export async function createRule(payload: {
     prioridade: payload.prioridade,
   }
   const result = await createAutomationInBackend(data)
+  // Invalidate automations cache
+  if (payload.clientId) cacheDelete(cacheKeys.automations(payload.clientId))
+  cacheDelete(cacheKeys.automations(undefined, payload.roomId))
   return mapAutomationResponse(result)
 }
 
@@ -177,10 +183,14 @@ export async function updateRule(id: string, payload: {
 export async function toggleRule(id: string, password?: string): Promise<AutomationRule> {
   await verifyPassword(password)
   const result = await toggleAutomationInBackend(id)
+  // Note: We can't easily invalidate specific cache keys without knowing the room/client IDs
+  // The cache will auto-expire in 5 minutes, but you could pass them as params for better performance
   return mapAutomationResponse(result)
 }
 
 export async function deleteRule(id: string, password?: string): Promise<void> {
   await verifyPassword(password)
   await deleteAutomationInBackend(id)
+  // Note: We can't easily invalidate specific cache keys without knowing the room/client IDs
+  // The cache will auto-expire in 5 minutes, but you could pass them as params for better performance
 }

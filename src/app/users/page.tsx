@@ -525,16 +525,18 @@ export default function UsersPage() {
                       }>
                       {u.role === 'admin_master' ? 'Administrador Master' : u.role === 'admin_client' ? 'Admin' : 'Usuário'}
                     </span>
-                    {u.id !== currentUser?.id && u.role !== 'admin_master' && (
+                    {u.id !== currentUser?.id && !(currentUser?.role === 'admin_master' && u.role === 'admin_master') && (
                       <>
-                        <button
-                          onClick={() => setRoleTarget(u)}
-                          className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
-                          style={{ background: '#f0f4f8', color: '#64748b', border: '1px solid #e2e8f0' }}
-                          title={u.role === 'admin_client' ? 'Rebaixar para usuário' : 'Promover a admin'}
-                        >
-                          {u.role === 'admin_client' ? '↓ Usuário' : '↑ Admin'}
-                        </button>
+                        {u.role !== 'admin_master' && (
+                          <button
+                            onClick={() => setRoleTarget(u)}
+                            className="text-xs px-3 py-1.5 rounded-xl font-medium transition-all"
+                            style={{ background: '#f0f4f8', color: '#64748b', border: '1px solid #e2e8f0' }}
+                            title={u.role === 'admin_client' ? 'Rebaixar para usuário' : 'Promover a admin'}
+                          >
+                            {u.role === 'admin_client' ? '↓ Usuário' : '↑ Admin'}
+                          </button>
+                        )}
                         <button
                           onClick={() => {
                             setDeleteTarget(u)
@@ -605,7 +607,7 @@ export default function UsersPage() {
                   </select>
                 </div>
 
-                {currentUser?.role === 'admin_master' && role !== 'admin_master' && availableClients.length > 0 && (
+                {currentUser?.role === 'admin_master' && role !== 'admin_master' && availableClients.filter(c => c.isActive).length > 0 && (
                   <div className="space-y-1.5 sm:col-span-2">
                     <label className="block text-sm font-medium" style={{ color: '#0f2744' }}>
                       Cliente <span className="text-red-500">*</span>
@@ -618,7 +620,7 @@ export default function UsersPage() {
                       style={{ background: '#f8fafc', border: '1.5px solid #e2e8f0', color: '#0f2744' }}
                     >
                       <option value="">Selecione um cliente</option>
-                      {availableClients.map(client => (
+                      {availableClients.filter(c => c.isActive).map(client => (
                         <option key={client.id} value={client.id}>
                           {client.name}
                         </option>

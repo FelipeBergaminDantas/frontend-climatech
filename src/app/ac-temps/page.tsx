@@ -40,6 +40,8 @@ export default function AcTempsPage() {
     return acs.filter((ac) => ac.salaId === selectedSalaId)
   }, [acs, selectedSalaId])
 
+  const isAdmin = user?.role === 'admin_master' || user?.role === 'admin_client'
+
   useEffect(() => {
     async function loadAcs() {
       setIsLoading(true)
@@ -47,7 +49,8 @@ export default function AcTempsPage() {
 
       try {
         const fetched = selectedSalaId === 'all'
-          ? await getAcs()
+          // Only pass clientId for admin_master users; regular users use auth context
+          ? await getAcs(user?.role === 'admin_master' ? user?.clientId : undefined)
           : await getAcsBySala(selectedSalaId)
 
         setAcs(fetched)
@@ -60,7 +63,7 @@ export default function AcTempsPage() {
     }
 
     loadAcs()
-  }, [selectedSalaId])
+  }, [selectedSalaId, user?.clientId, user?.role])
 
   async function handleSaveEdit() {
     if (!editingAc) return
@@ -73,7 +76,7 @@ export default function AcTempsPage() {
     setError(null)
 
     try {
-      const updated = await updateAc(editingAc.id, novoNomeAc)
+      const updated = await updateAc(editingAc.id, novoNomeAc, user?.clientId, editingAc.salaId)
       setAcs((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
       setEditingAc(null)
       setNovoNomeAc('')
@@ -98,7 +101,8 @@ export default function AcTempsPage() {
 
     try {
       await verifyCurrentPassword(password)
-      await deleteAc(pendingDeleteAcId)
+      const acToDelete = acs.find((ac) => ac.id === pendingDeleteAcId)
+      await deleteAc(pendingDeleteAcId, user?.clientId, acToDelete?.salaId)
       setAcs((prev) => prev.filter((item) => item.id !== pendingDeleteAcId))
       setPendingDeleteAcId(null)
     } catch (err) {
@@ -108,8 +112,6 @@ export default function AcTempsPage() {
       setActionLoading(false)
     }
   }
-
-  const isAdmin = user?.role === 'admin_master' || user?.role === 'admin_client'
 
   return (
     <main className="min-h-screen px-4 sm:px-6 py-6 sm:py-8 pb-16 bg-white">
@@ -202,14 +204,15 @@ export default function AcTempsPage() {
                       setNovoNomeAc(ac.nomeAc)
                       setError(null)
                     }}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    disabled={!isAdmin}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Editar nome do AC
                   </button>
                   <button
                     type="button"
                     onClick={() => handleDelete(ac.id)}
-                    disabled={actionLoading}
+                    disabled={actionLoading || !isAdmin}
                     className="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     Excluir AC

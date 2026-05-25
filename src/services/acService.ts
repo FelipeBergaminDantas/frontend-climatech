@@ -8,6 +8,7 @@ import {
   updateAcInBackend,
   deleteAcInBackend,
 } from '@/services/apiService'
+import { withCache, cacheKeys, cacheDelete } from '@/services/cacheService'
 
 function mapAcResponse(ac: AcResponse): Ac {
   return {
@@ -26,23 +27,33 @@ function mapAcResponse(ac: AcResponse): Ac {
 }
 
 export async function getAcs(clientId?: string): Promise<Ac[]> {
-  const acs = await getAcsFromBackend(clientId)
-  return acs.map(mapAcResponse)
+  return withCache(cacheKeys.acs(clientId), async () => {
+    const acs = await getAcsFromBackend(clientId)
+    return acs.map(mapAcResponse)
+  })
 }
 
 export async function getAcsBySala(salaId: string): Promise<Ac[]> {
-  const acs = await getAcsBySalaFromBackend(salaId)
-  return acs.map(mapAcResponse)
+  return withCache(cacheKeys.acs(undefined, salaId), async () => {
+    const acs = await getAcsBySalaFromBackend(salaId)
+    return acs.map(mapAcResponse)
+  })
 }
 
-export async function updateAc(id: string, nomeAc: string): Promise<Ac> {
+export async function updateAc(id: string, nomeAc: string, clientId?: string, salaId?: string): Promise<Ac> {
   const updated = await updateAcInBackend(id, { nome_ac: nomeAc.trim() })
+  // Invalidate ACs cache
+  if (clientId) cacheDelete(cacheKeys.acs(clientId))
+  if (salaId) cacheDelete(cacheKeys.acs(undefined, salaId))
   return mapAcResponse(updated)
 }
 
-export async function deleteAc(id: string): Promise<void> {
+export async function deleteAc(id: string, clientId?: string, salaId?: string): Promise<void> {
   const deleted = await deleteAcInBackend(id)
   if (!deleted) {
     throw new Error('Falha ao excluir AC')
   }
+  // Invalidate ACs cache
+  if (clientId) cacheDelete(cacheKeys.acs(clientId))
+  if (salaId) cacheDelete(cacheKeys.acs(undefined, salaId))
 }

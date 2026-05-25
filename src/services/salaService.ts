@@ -9,6 +9,7 @@ import {
   deleteSalaInBackend,
 } from '@/services/apiService'
 import { addOrUpdateNodesFromSala } from '@/services/nodeService'
+import { withCache, cacheKeys, cacheDelete } from '@/services/cacheService'
 
 const CTN_R_PATTERN = /^CTN-R-V(\d+)-\d+$/i
 
@@ -64,8 +65,11 @@ function mapSalaResponseToRoom(
 
 export async function getRooms(clientId: string): Promise<Room[]> {
   if (!clientId) return []
-  const salas = await getSalasFromBackend(clientId)
-  return salas.map((sala) => mapSalaResponseToRoom(sala))
+  
+  return withCache(cacheKeys.rooms(clientId), async () => {
+    const salas = await getSalasFromBackend(clientId)
+    return salas.map((sala) => mapSalaResponseToRoom(sala))
+  })
 }
 
 export async function createRoom(data: Omit<Room, 'id' | 'createdAt'>): Promise<Room> {
@@ -82,6 +86,9 @@ export async function createRoom(data: Omit<Room, 'id' | 'createdAt'>): Promise<
   }
 
   const sala = await createSalaInBackend(requestPayload)
+  // Invalidate room cache after creation
+  cacheDelete(cacheKeys.rooms(data.clientId))
+  
   // Sync nodes returned by backend into frontend node store
   try {
     addOrUpdateNodesFromSala(sala)
@@ -107,12 +114,20 @@ export async function updateRoom(
   if (data.targetTemp !== undefined) requestPayload.temp_alvo = data.targetTemp
 
   const sala = await updateSalaInBackend(id, requestPayload)
+  // Invalidate room cache after update
+  if (data.clientId) {
+    cacheDelete(cacheKeys.rooms(data.clientId))
+  }
 
   return mapSalaResponseToRoom(sala, {
     location: data.location,
   })
 }
 
-export async function deleteRoom(id: string): Promise<void> {
+export async function deleteRoom(id: string, clientId?: string): Promise<void> {
   await deleteSalaInBackend(id)
+  // Invalidate room cache after deletion
+  if (clientId) {
+    cacheDelete(cacheKeys.rooms(clientId))
+  }
 }

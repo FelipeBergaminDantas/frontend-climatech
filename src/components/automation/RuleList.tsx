@@ -9,9 +9,10 @@ interface RuleListProps {
   onToggle: (id: string) => void
   onEdit: (rule: AutomationRule) => void
   onDelete: (id: string) => void
+  isAdmin?: boolean
 }
 
-export function RuleList({ rules, onToggle, onEdit, onDelete }: RuleListProps) {
+export function RuleList({ rules, onToggle, onEdit, onDelete, isAdmin = false }: RuleListProps) {
   if (rules.length === 0) {
     return (
       <Card>
@@ -67,6 +68,7 @@ export function RuleList({ rules, onToggle, onEdit, onDelete }: RuleListProps) {
                   onClick={() => onToggle(rule.id)}
                   aria-label={rule.flAtivo ? 'Desativar regra' : 'Ativar regra'}
                   title={rule.flAtivo ? 'Desativar' : 'Ativar'}
+                  disabled={!isAdmin}
                 >
                   {rule.flAtivo ? (
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -86,6 +88,7 @@ export function RuleList({ rules, onToggle, onEdit, onDelete }: RuleListProps) {
                   onClick={() => onEdit(rule)}
                   aria-label="Editar regra"
                   title="Editar"
+                  disabled={!isAdmin}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -99,6 +102,7 @@ export function RuleList({ rules, onToggle, onEdit, onDelete }: RuleListProps) {
                   aria-label="Excluir regra"
                   title="Excluir"
                   className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                  disabled={!isAdmin}
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

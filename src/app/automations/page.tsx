@@ -78,20 +78,10 @@ export default function AutomationsPage() {
   useEffect(() => {
     if (!user) return
 
-    if (isOverviewMode) {
-      if (filterClient === 'all') {
-        loadRules(undefined)
-      } else {
-        loadRules(undefined, filterClient)
-      }
-      return
-    }
-
-    const clientId = user.selectedClientId || user.clientId
-    if (clientId) {
-      loadRules(undefined, clientId)
-    }
-  }, [filterClient, isOverviewMode, loadRules, user?.clientId, user?.selectedClientId, user])
+    // Don't pass clientId to backend - it uses authenticated context
+    // backend will handle filtering based on user role
+    loadRules(undefined)
+  }, [loadRules, user])
 
   useEffect(() => {
     const roomsWithRules = roomsToDisplay.filter(room => getRulesForRoom(room.id).length > 0)
@@ -338,9 +328,10 @@ export default function AutomationsPage() {
                   <div className="divide-y divide-slate-50">
                     <RuleList
                       rules={rules}
-                      onToggle={isAdmin ? handleToggleRule : () => {}}
+                      onToggle={handleToggleRule}
                       onEdit={handleEditRule}
                       onDelete={handleDeleteRule}
+                      isAdmin={isAdmin}
                     />
                   </div>
                 </div>

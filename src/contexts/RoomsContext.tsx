@@ -33,23 +33,32 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
   const [deviceStates, setDeviceStates] = useState<Record<string, DeviceState>>({})
   const [isLoading, setIsLoading] = useState(true)
   const [activeClientIds, setActiveClientIds] = useState<string[]>([])
-  const [isLoadingClients, setIsLoadingClients] = useState(true)
+  const [isLoadingClients, setIsLoadingClients] = useState(false)
+  const [cachedClients, setCachedClients] = useState<string[] | null>(null)
 
+  // Lazy-load active clients only for admin_master users
   useEffect(() => {
+    if (user?.role !== 'admin_master' || cachedClients !== null) {
+      return // Skip for non-admins or if already cached
+    }
+
     async function loadActiveClientIds() {
       setIsLoadingClients(true)
       try {
         const clients = await getAllClients()
-        setActiveClientIds(clients.filter((client) => client.isActive).map((client) => client.id))
+        const activeIds = clients.filter((client) => client.isActive).map((client) => client.id)
+        setActiveClientIds(activeIds)
+        setCachedClients(activeIds)
       } catch (error) {
         console.error('Failed to load active clients:', error)
+        setCachedClients([])
       } finally {
         setIsLoadingClients(false)
       }
     }
 
     loadActiveClientIds()
-  }, [])
+  }, [user?.role, cachedClients])
 
   useEffect(() => {
     async function loadRooms() {
@@ -59,14 +68,26 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
         return
       }
 
+      // For non-admin users, don't wait for active clients
+      if (user.role !== 'admin_master' && isLoadingClients) {
+        return // Wait for user role confirmation, not clients
+      }
+
       setIsLoading(true)
 
       try {
         let clientIds: string[] = []
 
         if (user.role === 'admin_master') {
+          // Only load all clients if we have them cached
+          if (cachedClients === null) {
+            setAllRooms([])
+            setIsLoading(false)
+            return
+          }
           clientIds = user.selectedClientId ? [user.selectedClientId] : activeClientIds
         } else if (user.clientId) {
+          // Direct client ID for non-admin users - much faster
           clientIds = [user.clientId]
         }
 
@@ -86,7 +107,7 @@ export function RoomsProvider({ children }: { children: ReactNode }) {
     }
 
     loadRooms()
-  }, [user, activeClientIds])
+  }, [user, activeClientIds, cachedClients, isLoadingClients])
 
   useEffect(() => {
     const states: Record<string, DeviceState> = {}

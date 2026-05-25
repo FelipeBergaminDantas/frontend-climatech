@@ -18,13 +18,29 @@ export const ClientContext = createContext<ClientContextValue | null>(null)
 export function ClientProvider({ children }: { children: ReactNode }) {
   const [selectedClient, setSelectedClient] = useState<Client | null>(null)
   const [availableClients, setAvailableClients] = useState<Client[]>([])
+  const [isLoadingClients, setIsLoadingClients] = useState(false)
+  const [cachedClients, setCachedClients] = useState<Client[] | null>(null)
 
-  // Carregar clientes disponíveis
+  // Carregar clientes disponíveis com cache
   useEffect(() => {
-    getAllClients().then(clients => {
-      setAvailableClients(clients)
-    })
-  }, [])
+    if (cachedClients !== null) {
+      // Use cached clients
+      setAvailableClients(cachedClients)
+      return
+    }
+
+    setIsLoadingClients(true)
+    getAllClients()
+      .then(clients => {
+        setAvailableClients(clients)
+        setCachedClients(clients)
+      })
+      .catch(err => {
+        console.error('Failed to load clients:', err)
+        setCachedClients([])
+      })
+      .finally(() => setIsLoadingClients(false))
+  }, [cachedClients])
 
   // Restaurar cliente selecionado do sessionStorage
   useEffect(() => {

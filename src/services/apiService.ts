@@ -320,14 +320,20 @@ export interface AutomationStateResponse {
 
 export async function getAutomationsFromBackend(clientId?: string, salaId?: string): Promise<AutomationResponse[]> {
   const params = new URLSearchParams()
+  // Only include client_id for admins querying other clients
+  // Regular users will use their authenticated context
   if (clientId) params.set('client_id', clientId)
   if (salaId) params.set('sala_id', salaId)
   const query = params.toString() ? `?${params.toString()}` : ''
   const response = await fetch(`${API_BASE_URL}/automacoes${query}`, {
     method: 'GET',
     headers: buildHeaders(false),
+    credentials: 'include',
   })
-  if (!response.ok) throw new Error('Failed to fetch automations')
+  if (!response.ok) {
+    const error = await response.json().catch(() => null)
+    throw new Error(error?.message || 'Failed to fetch automations')
+  }
   const result: ApiResponse<AutomationResponse[]> = await response.json()
   return result.data
 }
@@ -586,7 +592,7 @@ export async function getAcsBySalaFromBackend(salaId: string): Promise<AcRespons
  */
 export async function updateAcInBackend(id: string, data: AcUpdateRequest): Promise<AcResponse> {
   const response = await fetch(`${API_BASE_URL}/acs/${id}`, {
-    method: 'PATCH',
+    method: 'PUT',
     headers: buildHeaders(),
     credentials: 'include',
     body: JSON.stringify(data),
@@ -594,7 +600,8 @@ export async function updateAcInBackend(id: string, data: AcUpdateRequest): Prom
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || 'Failed to update AC')
+    const message = error?.message || error?.errors?.[0]?.message || 'Falha ao atualizar AC'
+    throw new Error(message)
   }
 
   const result: ApiResponse<AcResponse> = await response.json()
@@ -633,7 +640,8 @@ export async function createSalaInBackend(data: SalaCreateRequest): Promise<Sala
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
-    throw new Error(error?.message || 'Failed to create sala')
+    const message = error?.message || error?.errors?.[0]?.message || 'Falha ao criar sala'
+    throw new Error(message)
   }
 
   const result: ApiResponse<SalaDetailResponse> = await response.json()
