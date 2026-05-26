@@ -153,6 +153,7 @@ export default function AutomationsPage({ params }: PageProps) {
           onToggle={isAdmin ? handleToggle : () => {}}
           onEdit={isAdmin ? handleEdit : () => {}}
           onDelete={isAdmin ? handleDelete : () => {}}
+          isAdmin={isAdmin}
         />
 
         {isAdmin && (

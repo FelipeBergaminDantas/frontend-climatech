@@ -294,6 +294,7 @@ export default function AutomationsPage() {
                               onToggle={isAdmin ? handleToggleRule : () => {}}
                               onEdit={isAdmin ? handleEditRule : () => {}}
                               onDelete={isAdmin ? handleDeleteRule : () => {}}
+                              isAdmin={isAdmin}
                             />
                           </div>
                         </div>
