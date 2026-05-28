@@ -28,6 +28,7 @@ export interface Room {
   name: string;
   deviceId: string;
   acCount: number;
+  sizeM2: number;
   ctncNodeIds?: string[];
   location?: string;
   idealTempMin: number;

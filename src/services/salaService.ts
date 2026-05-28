@@ -54,6 +54,7 @@ function mapSalaResponseToRoom(
     name: sala.nome_sala,
     deviceId: sala.ctnr_node_id,
     acCount: sala.qtd_ac,
+    sizeM2: sala.tam_sala_m2,
     ctncNodeIds: parseCtncNodeIds(sala),
     location: overrides.location,
     idealTempMin: sala.temp_ideal_min,
@@ -78,6 +79,7 @@ export async function createRoom(data: Omit<Room, 'id' | 'createdAt'>): Promise<
   const requestPayload = {
     client_id: data.clientId,
     nome_sala: data.name.trim(),
+    tam_sala_m2: data.sizeM2,
     temp_ideal_min: data.idealTempMin,
     temp_ideal_max: data.idealTempMax,
     temp_alvo: data.targetTemp ?? undefined,
@@ -109,6 +111,7 @@ export async function updateRoom(
   const requestPayload: Record<string, unknown> = {}
 
   if (data.name !== undefined) requestPayload.nome_sala = data.name.trim()
+  if (data.sizeM2 !== undefined) requestPayload.tam_sala_m2 = data.sizeM2
   if (data.idealTempMin !== undefined) requestPayload.temp_ideal_min = data.idealTempMin
   if (data.idealTempMax !== undefined) requestPayload.temp_ideal_max = data.idealTempMax
   if (data.targetTemp !== undefined) requestPayload.temp_alvo = data.targetTemp

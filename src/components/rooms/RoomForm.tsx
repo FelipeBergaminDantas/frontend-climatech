@@ -33,6 +33,7 @@ interface FormErrors {
   name?: string
   deviceId?: string
   acCount?: string
+  sizeM2?: string
   idealTempMin?: string
   idealTempMax?: string
   targetTemp?: string
@@ -48,6 +49,7 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
   const [name, setName] = useState(initialRoom?.name ?? '')
   const [deviceId, setDeviceId] = useState(initialRoom?.deviceId ?? buildDefaultCtnrNodeId())
   const [acCount, setAcCount] = useState(initialRoom?.acCount?.toString() ?? '1')
+  const [sizeM2, setSizeM2] = useState(initialRoom?.sizeM2?.toString() ?? '')
   const [ctncNodeIds, setCtncNodeIds] = useState<string[]>(
     initialRoom?.ctncNodeIds?.length ? initialRoom.ctncNodeIds : buildDefaultCtncNodeIds(1)
   )
@@ -123,6 +125,13 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
       next.acCount = 'Ao menos um CTN-C deve ser informado.'
     }
 
+    const sizeValue = parseFloat(sizeM2)
+    if (sizeM2 === '' || isNaN(sizeValue)) {
+      next.sizeM2 = 'Tamanho da sala é obrigatório.'
+    } else if (sizeValue <= 0) {
+      next.sizeM2 = 'O tamanho da sala deve ser maior que 0.'
+    }
+
     if (!isNaN(ac) && ctncNodeIds.length !== ac) {
       next.acCount = 'O número de CTN-C deve corresponder à quantidade de ACs.'
     }
@@ -193,6 +202,7 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
         name: name.trim(),
         deviceId: deviceId.trim(),
         acCount: Math.max(1, parseInt(acCount) || 1),
+        sizeM2: parseFloat(sizeM2),
         ctncNodeIds: ctncNodeIds.map((id) => id.trim()),
         idealTempMin: parseFloat(idealTempMin),
         idealTempMax: parseFloat(idealTempMax),
@@ -263,6 +273,20 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
         placeholder="Ex: 1"
         required
         disabled={isEditing}
+      />
+
+      <Input
+        label="Tamanho da Sala (m²)"
+        id="room-size-m2"
+        name="room-size-m2"
+        type="number"
+        min={0.1}
+        step="0.1"
+        value={sizeM2}
+        onChange={(e) => setSizeM2(e.target.value)}
+        error={errors.sizeM2}
+        placeholder="Ex: 42.5"
+        required
       />
 
       <div className="rounded-2xl p-4 bg-slate-50 border border-slate-200 text-sm text-slate-600 space-y-3">

@@ -48,6 +48,7 @@ export interface ApiResponse<T> {
 export interface SalaCreateRequest {
   client_id: string;
   nome_sala: string;
+  tam_sala_m2: number;
   temp_ideal_min: number;
   temp_ideal_max: number;
   temp_alvo?: number | null;
@@ -57,6 +58,7 @@ export interface SalaCreateRequest {
 
 export interface SalaUpdateRequest {
   nome_sala?: string;
+  tam_sala_m2?: number;
   temp_ideal_min?: number;
   temp_ideal_max?: number;
   temp_alvo?: number | null;
@@ -66,6 +68,7 @@ export interface SalaResponse {
   id: string;
   client_id: string;
   nome_sala: string;
+  tam_sala_m2: number;
   ctnr_node_id: string;
   qtd_ac: number;
   temp_ideal_min: number;

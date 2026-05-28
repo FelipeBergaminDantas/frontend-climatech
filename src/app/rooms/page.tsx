@@ -94,6 +94,7 @@ export default function RoomsPage() {
         await updateRoom(payload.room.id, {
           name: roomData.name,
           deviceId: roomData.deviceId,
+          sizeM2: roomData.sizeM2,
           location: roomData.location,
           idealTempMin: roomData.idealTempMin,
           idealTempMax: roomData.idealTempMax,

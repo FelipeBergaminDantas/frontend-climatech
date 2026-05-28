@@ -104,6 +104,12 @@ export function RoomList({ rooms, deviceStates, onEdit, onDelete, isAdmin = fals
                   {room.location && <p className="text-xs text-slate-400 mt-0.5">{room.location}</p>}
                   <div className="flex flex-wrap gap-4 mt-2 text-xs text-slate-500">
                     <span>
+                      Área:{' '}
+                      <span className="font-semibold" style={{ color: '#1e5fa8' }}>
+                        {room.sizeM2.toFixed(1)} m²
+                      </span>
+                    </span>
+                    <span>
                       Temp:{' '}
                       <span className="font-semibold" style={{ color: '#1e5fa8' }}>
                         {state ? `${state.currentTemp}°C` : '—'}

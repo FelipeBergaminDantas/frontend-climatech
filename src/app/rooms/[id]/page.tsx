@@ -79,6 +79,7 @@ export default function RoomDetailPage({ params }: PageProps) {
             <h1 className="text-2xl font-bold" style={{ color: '#0f2744' }}>{room.name}</h1>
             {room.location && <p className="text-sm text-slate-400 mt-0.5">{room.location}</p>}
             <p className="text-xs text-slate-400 mt-1">Ideal: {room.idealTempMin}°C – {room.idealTempMax}°C</p>
+            <p className="text-xs text-slate-400 mt-0.5">Área: {room.sizeM2.toFixed(1)} m²</p>
             <p className="text-xs text-slate-400 mt-0.5">
               Alvo: {room.targetTemp !== undefined && room.targetTemp !== null ? `${room.targetTemp}°C` : 'Não definido'}
             </p>
