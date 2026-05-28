@@ -55,6 +55,7 @@ export default function NewRoomPage() {
         name: roomData.name,
         deviceId: roomData.deviceId,
         acCount: roomData.acCount,
+        sizeM2: roomData.sizeM2,
         location: roomData.location,
         idealTempMin: roomData.idealTempMin,
         idealTempMax: roomData.idealTempMax,
