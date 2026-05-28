@@ -1,7 +1,7 @@
 'use client'
 
 import type { Ac } from '@/types'
-import type { AcResponse, AcUpdateRequest } from '@/services/apiService'
+import type { AcResponse, AcUpdateRequest, AcCreateRequest } from '@/services/apiService'
 import {
   getAcsFromBackend,
   getAcsBySalaFromBackend,
@@ -18,6 +18,9 @@ function mapAcResponse(ac: AcResponse): Ac {
     salaName: ac.sala_name,
     nodeId: ac.node_id,
     nomeAc: ac.nome_ac,
+    marcaAc: ac.marca_ac,
+    modeloAc: ac.modelo_ac,
+    capacidadeBtus: ac.capacidade_btus,
     nodeStatus: ac.node_status,
     nodeType: ac.node_type,
     nodeLastSeen: ac.node_last_seen,
@@ -40,8 +43,22 @@ export async function getAcsBySala(salaId: string): Promise<Ac[]> {
   })
 }
 
-export async function updateAc(id: string, nomeAc: string, clientId?: string, salaId?: string): Promise<Ac> {
-  const updated = await updateAcInBackend(id, { nome_ac: nomeAc.trim() })
+export async function updateAc(
+  id: string,
+  nomeAc: string,
+  clientId?: string,
+  salaId?: string,
+  marcaAc?: string,
+  modeloAc?: string,
+  capacidadeBtus?: number
+): Promise<Ac> {
+  const updatePayload: Record<string, unknown> = { nome_ac: nomeAc.trim() }
+
+  if (marcaAc) updatePayload.marca_ac = marcaAc.trim()
+  if (modeloAc) updatePayload.modelo_ac = modeloAc.trim()
+  if (capacidadeBtus) updatePayload.capacidade_btus = capacidadeBtus
+
+  const updated = await updateAcInBackend(id, updatePayload as any)
   // Invalidate ACs cache
   if (clientId) cacheDelete(cacheKeys.acs(clientId))
   if (salaId) cacheDelete(cacheKeys.acs(undefined, salaId))

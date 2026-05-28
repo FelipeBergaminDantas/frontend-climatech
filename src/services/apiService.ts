@@ -53,7 +53,7 @@ export interface SalaCreateRequest {
   temp_ideal_max: number;
   temp_alvo?: number | null;
   ctnr_node_id: string;
-  ctnc_nodes: string[];
+  ctnc_nodes: NodeCreateRequest[];
 }
 
 export interface SalaUpdateRequest {
@@ -91,6 +91,11 @@ export interface NodeResponse {
 
 export interface NodeCreateRequest {
   node_id: string;
+  nome_ac: string;
+  marca_ac: string;
+  modelo_ac: string;
+  capacidade_btus: number;
+  tensao_fonte: number;
 }
 
 export interface NodeUpdateRequest {
@@ -109,6 +114,9 @@ export interface AcResponse {
   sala_name?: string;
   node_id: string;
   nome_ac: string;
+  marca_ac?: string;
+  modelo_ac?: string;
+  capacidade_btus?: number;
   node_status?: string;
   node_type?: string;
   node_last_seen?: string;
@@ -116,8 +124,20 @@ export interface AcResponse {
   dth_updated_at?: string;
 }
 
-export interface AcUpdateRequest {
+export interface AcCreateRequest {
   nome_ac: string;
+  marca_ac: string;
+  modelo_ac: string;
+  capacidade_btus: number;
+  tensao_fonte: number;
+}
+
+export interface AcUpdateRequest {
+  nome_ac?: string;
+  marca_ac?: string;
+  modelo_ac?: string;
+  capacidade_btus?: number;
+  tensao_fonte?: number;
 }
 
 function getAccessToken(): string | null {

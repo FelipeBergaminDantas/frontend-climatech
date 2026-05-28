@@ -10,6 +10,13 @@ import { verifyCurrentPassword } from '@/services/userService'
 import { PasswordConfirmModal } from '@/components/ui/PasswordConfirmModal'
 import type { Ac } from '@/types'
 
+interface AcEditForm {
+  nomeAc: string;
+  marcaAc: string;
+  modeloAc: string;
+  capacidadeBtus: number | '';
+}
+
 export default function AcTempsPage() {
   const router = useRouter()
   const { user } = useAuth()
@@ -19,7 +26,12 @@ export default function AcTempsPage() {
   const [error, setError] = useState<string | null>(null)
   const [selectedSalaId, setSelectedSalaId] = useState<string>('all')
   const [editingAc, setEditingAc] = useState<Ac | null>(null)
-  const [novoNomeAc, setNovoNomeAc] = useState<string>('')
+  const [editForm, setEditForm] = useState<AcEditForm>({
+    nomeAc: '',
+    marcaAc: '',
+    modeloAc: '',
+    capacidadeBtus: '',
+  })
   const [actionLoading, setActionLoading] = useState(false)
   const [pendingDeleteAcId, setPendingDeleteAcId] = useState<string | null>(null)
 
@@ -67,8 +79,26 @@ export default function AcTempsPage() {
 
   async function handleSaveEdit() {
     if (!editingAc) return
-    if (!novoNomeAc.trim()) {
-      setError('Informe um nome válido para o AC.')
+
+    // Validations
+    if (!editForm.nomeAc.trim()) {
+      setError('Nome do AC é obrigatório.')
+      return
+    }
+    if (!editForm.marcaAc.trim()) {
+      setError('Marca do AC é obrigatória.')
+      return
+    }
+    if (!editForm.modeloAc.trim()) {
+      setError('Modelo do AC é obrigatório.')
+      return
+    }
+    if (editForm.capacidadeBtus === '' || editForm.capacidadeBtus <= 0) {
+      setError('Capacidade em BTUs deve ser um valor positivo.')
+      return
+    }
+    if (editForm.capacidadeBtus > 100000) {
+      setError('Capacidade em BTUs não pode exceder 100.000.')
       return
     }
 
@@ -76,13 +106,26 @@ export default function AcTempsPage() {
     setError(null)
 
     try {
-      const updated = await updateAc(editingAc.id, novoNomeAc, user?.clientId, editingAc.salaId)
+      const updated = await updateAc(
+        editingAc.id,
+        editForm.nomeAc.trim(),
+        user?.clientId,
+        editingAc.salaId,
+        editForm.marcaAc.trim(),
+        editForm.modeloAc.trim(),
+        typeof editForm.capacidadeBtus === 'number' ? editForm.capacidadeBtus : undefined
+      )
       setAcs((prev) => prev.map((item) => (item.id === updated.id ? updated : item)))
       setEditingAc(null)
-      setNovoNomeAc('')
+      setEditForm({
+        nomeAc: '',
+        marcaAc: '',
+        modeloAc: '',
+        capacidadeBtus: '',
+      })
     } catch (err) {
       console.error('Failed to update AC:', err)
-      setError('Falha ao atualizar o nome do AC. Verifique se o nome é único.')
+      setError(err instanceof Error ? err.message : 'Falha ao atualizar o AC.')
     } finally {
       setActionLoading(false)
     }
@@ -182,6 +225,29 @@ export default function AcTempsPage() {
                   </div>
                 </div>
 
+                <div className="mt-4 flex flex-col gap-3 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Marca</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{ac.marcaAc ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Modelo</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">{ac.modeloAc ?? '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Capacidade</p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        {ac.capacidadeBtus ? `${ac.capacidadeBtus.toLocaleString('pt-BR')} BTU` : '—'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Criado em</p>
+                      <p className="mt-1 text-sm text-slate-700">{ac.createdAt ? new Date(ac.createdAt).toLocaleString('pt-BR') : '—'}</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
                     Status node: {ac.nodeStatus ?? 'indefinido'}
@@ -201,13 +267,18 @@ export default function AcTempsPage() {
                     type="button"
                     onClick={() => {
                       setEditingAc(ac)
-                      setNovoNomeAc(ac.nomeAc)
+                      setEditForm({
+                        nomeAc: ac.nomeAc,
+                        marcaAc: ac.marcaAc || '',
+                        modeloAc: ac.modeloAc || '',
+                        capacidadeBtus: ac.capacidadeBtus || '',
+                      })
                       setError(null)
                     }}
                     disabled={!isAdmin}
                     className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    Editar nome do AC
+                    Editar detalhes
                   </button>
                   <button
                     type="button"
@@ -237,32 +308,69 @@ export default function AcTempsPage() {
 
       {editingAc && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 py-6">
-          <div className="w-full max-w-xl rounded-3xl bg-white p-6 shadow-2xl">
+          <div className="w-full max-w-2xl rounded-3xl bg-white p-6 shadow-2xl">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold text-slate-900">Editar nome do AC</h2>
-                <p className="mt-1 text-sm text-slate-500">Somente o nome amigável pode ser alterado.</p>
+                <h2 className="text-xl font-semibold text-slate-900">Editar detalhes do AC</h2>
+                <p className="mt-1 text-sm text-slate-500">Atualize as informações do ar-condicionado.</p>
               </div>
               <button
                 type="button"
                 onClick={() => setEditingAc(null)}
                 className="text-slate-400 transition hover:text-slate-600"
               >
-                Fechar
+                ✕
               </button>
             </div>
 
             <div className="mt-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700">Nome do AC</label>
+                <label className="block text-sm font-medium text-slate-700">Nome do AC *</label>
                 <input
-                  value={novoNomeAc}
-                  onChange={(event) => setNovoNomeAc(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400"
+                  value={editForm.nomeAc}
+                  onChange={(e) => setEditForm({ ...editForm, nomeAc: e.target.value })}
+                  placeholder="Ex: AC-1"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white"
                 />
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Marca do AC *</label>
+                <input
+                  value={editForm.marcaAc}
+                  onChange={(e) => setEditForm({ ...editForm, marcaAc: e.target.value })}
+                  placeholder="Ex: Electrolux, LG, Daikin"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white"
+                />
+                <p className="mt-1 text-xs text-slate-500">Mínimo 2 caracteres, máximo 100</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Modelo do AC *</label>
+                <input
+                  value={editForm.modeloAc}
+                  onChange={(e) => setEditForm({ ...editForm, modeloAc: e.target.value })}
+                  placeholder="Ex: TIS09F, AW1801H"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white"
+                />
+                <p className="mt-1 text-xs text-slate-500">Mínimo 2 caracteres, máximo 100</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700">Capacidade (BTU) *</label>
+                <input
+                  type="number"
+                  value={editForm.capacidadeBtus}
+                  onChange={(e) => setEditForm({ ...editForm, capacidadeBtus: e.target.value === '' ? '' : parseInt(e.target.value) || '' })}
+                  placeholder="Ex: 9000, 12000"
+                  min="1"
+                  max="100000"
+                  className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:bg-white"
+                />
+                <p className="mt-1 text-xs text-slate-500">Deve ser um valor entre 1 e 100.000 BTU</p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-4">
                 <button
                   type="button"
                   onClick={handleSaveEdit}

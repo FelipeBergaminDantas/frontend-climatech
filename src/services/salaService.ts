@@ -84,7 +84,24 @@ export async function createRoom(data: Omit<Room, 'id' | 'createdAt'>): Promise<
     temp_ideal_max: data.idealTempMax,
     temp_alvo: data.targetTemp ?? undefined,
     ctnr_node_id: data.deviceId.trim(),
-    ctnc_nodes: data.ctncNodeIds?.map((id) => id.trim()) ?? buildCtncNodeIds(data.deviceId, data.acCount),
+    ctnc_nodes: data.ctncNodes
+      ? data.ctncNodes
+      : data.ctncNodeIds?.map((id) => ({
+          node_id: id.trim(),
+          nome_ac: '',
+          marca_ac: '',
+          modelo_ac: '',
+          capacidade_btus: 0,
+          tensao_fonte: 0,
+        })) ??
+        buildCtncNodeIds(data.deviceId, data.acCount).map((id) => ({
+          node_id: id,
+          nome_ac: '',
+          marca_ac: '',
+          modelo_ac: '',
+          capacidade_btus: 0,
+          tensao_fonte: 0,
+        })),
   }
 
   const sala = await createSalaInBackend(requestPayload)

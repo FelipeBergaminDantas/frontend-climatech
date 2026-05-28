@@ -114,9 +114,18 @@ export function addOrUpdateNodesFromSala(salaDetail: any): void {
   nodes = [...nodes, ...mapped]
 }
 
-export async function addCtncNode(roomId: string, roomName: string, nodeId: string): Promise<ClimaTechNode> {
+export async function addCtncNode(
+  roomId: string,
+  roomName: string,
+  nodeId: string,
+  nomeAc: string,
+  marcaAc: string,
+  modeloAc: string,
+  capacidadeBtus: number,
+  tensaoFonte: number,
+): Promise<ClimaTechNode> {
   try {
-    console.log('[nodeService] addCtncNode start:', { roomId, roomName, nodeId })
+    console.log('[nodeService] addCtncNode start:', { roomId, roomName, nodeId, nomeAc, marcaAc, modeloAc, capacidadeBtus })
     const normalized = nodeId.trim().toUpperCase()
     const ctncPattern = /^CTN-C-V\d+-\d+$/
     if (!normalized) throw new Error('Identificador do node não pode ficar vazio.')
@@ -128,7 +137,14 @@ export async function addCtncNode(roomId: string, roomName: string, nodeId: stri
     }
 
     console.log('[nodeService] Creating CTN-C node in backend...')
-    const created = await createCtncNodeInBackend(roomId, { node_id: normalized })
+    const created = await createCtncNodeInBackend(roomId, {
+      node_id: normalized,
+      nome_ac: nomeAc.trim(),
+      marca_ac: marcaAc.trim(),
+      modelo_ac: modeloAc.trim(),
+      capacidade_btus: capacidadeBtus,
+      tensao_fonte: tensaoFonte,
+    })
     console.log('[nodeService] Backend returned:', created)
     
     const mapped = mapBackendNode(created, roomName)

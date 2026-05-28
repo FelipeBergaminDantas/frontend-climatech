@@ -252,6 +252,14 @@ function CreateNodeModal({
   onSelectRoom,
   nodeId,
   onNodeIdChange,
+  newAcName,
+  setNewAcName,
+  newAcBrand,
+  setNewAcBrand,
+  newAcModel,
+  setNewAcModel,
+  newAcCapacity,
+  setNewAcCapacity,
   onCreate,
   isCreating,
   creationError,
@@ -267,6 +275,16 @@ function CreateNodeModal({
   onSelectRoom: (roomId: string) => void
   nodeId: string
   onNodeIdChange: (value: string) => void
+  newAcName: string
+  setNewAcName: (value: string) => void
+  newAcBrand: string
+  setNewAcBrand: (value: string) => void
+  newAcModel: string
+  setNewAcModel: (value: string) => void
+  newAcCapacity: string
+  setNewAcCapacity: (value: string) => void
+  newAcTensao: string
+  setNewAcTensao: (value: string) => void
   onCreate: () => void
   isCreating: boolean
   creationError: string
@@ -327,6 +345,63 @@ function CreateNodeModal({
               value={nodeId}
               onChange={(e) => onNodeIdChange(e.target.value)}
               placeholder="CTN-C-V1-000001"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Nome do AC</label>
+            <input
+              type="text"
+              value={newAcName}
+              onChange={(e) => setNewAcName(e.target.value)}
+              placeholder="AC Sala 501"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Marca do AC</label>
+            <input
+              type="text"
+              value={newAcBrand}
+              onChange={(e) => setNewAcBrand(e.target.value)}
+              placeholder="LG, Samsung, Daikin"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Modelo do AC</label>
+            <input
+              type="text"
+              value={newAcModel}
+              onChange={(e) => setNewAcModel(e.target.value)}
+              placeholder="12000 BTU, Split Inverter"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Capacidade (BTUs)</label>
+            <input
+              type="number"
+              min="1"
+              value={newAcCapacity}
+              onChange={(e) => setNewAcCapacity(e.target.value)}
+              placeholder="12000"
+              className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Tensão da fonte (V)</label>
+            <input
+              type="number"
+              min="1"
+              value={newAcTensao}
+              onChange={(e) => setNewAcTensao(e.target.value)}
+              placeholder="220"
               className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none"
             />
           </div>
@@ -451,6 +526,11 @@ export default function NodesPage() {
   const [filterClient, setFilterClient] = useState<string>('all') // Novo filtro de cliente
   const [selectedNode, setSelectedNode] = useState<ClimaTechNode | null>(null)
   const [newNodeId, setNewNodeId] = useState('CTN-C-V')
+  const [newAcName, setNewAcName] = useState('')
+  const [newAcBrand, setNewAcBrand] = useState('')
+  const [newAcModel, setNewAcModel] = useState('')
+  const [newAcCapacity, setNewAcCapacity] = useState('')
+  const [newAcTensao, setNewAcTensao] = useState('')
   const [createRoomId, setCreateRoomId] = useState<string>('all')
   const [createClientId, setCreateClientId] = useState<string>('all')
   const [creationError, setCreationError] = useState<string>('')
@@ -596,10 +676,39 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
       return
     }
 
+    if (!newAcName.trim() || !newAcBrand.trim() || !newAcModel.trim() || !newAcCapacity.trim() || !newAcTensao.trim()) {
+      const msg = 'Preencha todas as informações do AC: nome, marca, modelo, capacidade e tensão.'
+      console.error('[nodesPage] Error:', msg, { newAcName, newAcBrand, newAcModel, newAcCapacity, newAcTensao })
+      setCreationError(msg)
+      return
+    }
+
+    const capacidadeBtus = Number(newAcCapacity)
+    const tensaoFonte = Number(newAcTensao)
+    if (Number.isNaN(capacidadeBtus) || capacidadeBtus <= 0) {
+      const msg = 'Informe uma capacidade de BTUs válida maior que zero.'
+      console.error('[nodesPage] Error:', msg, { newAcCapacity })
+      setCreationError(msg)
+      return
+    }
+
+    if (Number.isNaN(tensaoFonte) || tensaoFonte <= 0) {
+      const msg = 'Informe uma tensão de fonte válida maior que zero.'
+      console.error('[nodesPage] Error:', msg, { newAcTensao })
+      setCreationError(msg)
+      return
+    }
+    if (Number.isNaN(capacidadeBtus) || capacidadeBtus <= 0) {
+      const msg = 'Informe uma capacidade de BTUs válida maior que zero.'
+      console.error('[nodesPage] Error:', msg, { newAcCapacity })
+      setCreationError(msg)
+      return
+    }
+
     setIsCreatingNode(true)
     try {
-      console.log('[nodesPage] Creating node:', { roomId, roomName: room.name, nodeId: newNodeId })
-      const node = await addCtncNode(roomId, room.name, newNodeId)
+      console.log('[nodesPage] Creating node:', { roomId, roomName: room.name, nodeId: newNodeId, newAcName, newAcBrand, newAcModel, capacidadeBtus, tensaoFonte })
+      const node = await addCtncNode(roomId, room.name, newNodeId, newAcName, newAcBrand, newAcModel, capacidadeBtus, tensaoFonte)
       console.log('[nodesPage] Node created:', node)
       
       patchRoomLocally(roomId, {
@@ -608,6 +717,11 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
       })
       setNodes((prev) => [...prev, node])
       setNewNodeId('CTN-C-V')
+      setNewAcName('')
+      setNewAcBrand('')
+      setNewAcModel('')
+      setNewAcCapacity('')
+      setNewAcTensao('')
       setShowCreateModal(false)
       setCreationError('')
     } catch (error) {
@@ -830,6 +944,16 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
             onSelectRoom={(value) => setCreateRoomId(value)}
             nodeId={newNodeId}
             onNodeIdChange={(value) => setNewNodeId(formatCtncInput(value))}
+            newAcName={newAcName}
+            setNewAcName={setNewAcName}
+            newAcBrand={newAcBrand}
+            setNewAcBrand={setNewAcBrand}
+            newAcModel={newAcModel}
+            setNewAcModel={setNewAcModel}
+            newAcCapacity={newAcCapacity}
+            setNewAcCapacity={setNewAcCapacity}
+            newAcTensao={newAcTensao}
+            setNewAcTensao={setNewAcTensao}
             onCreate={handleCreateCtncNode}
             isCreating={isCreatingNode}
             creationError={creationError}

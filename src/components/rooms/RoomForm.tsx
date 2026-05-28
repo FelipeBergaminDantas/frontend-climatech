@@ -21,9 +21,18 @@ function buildDefaultCtncNodeIds(count: number): string[] {
   return Array.from({ length: validCount }, () => 'CTN-C-V')
 }
 
+interface CtncNodeCreatePayload {
+  node_id: string
+  nome_ac: string
+  marca_ac: string
+  modelo_ac: string
+  capacidade_btus: number
+  tensao_fonte: number
+}
+
 interface RoomFormProps {
   userId: string
-  onSave: (room: Room) => Promise<void>
+  onSave: (room: Omit<Room, 'id' | 'createdAt'> & { ctncNodes?: CtncNodeCreatePayload[] }) => Promise<void>
   onCancel: () => void
   initialRoom?: Room
   serverError?: string | null
@@ -37,6 +46,17 @@ interface FormErrors {
   idealTempMin?: string
   idealTempMax?: string
   targetTemp?: string
+  ctncNodeIds?: string
+  ctncDetails?: string
+}
+
+interface CtncNodeDetail {
+  nodeId: string
+  nomeAc: string
+  marcaAc: string
+  modeloAc: string
+  capacidadeBtus: string
+  tensaoFonte: string
 }
 
 function isAutomationTempError(message: string): boolean {
@@ -44,14 +64,37 @@ function isAutomationTempError(message: string): boolean {
   return lower.includes('automa') || lower.includes('temperatura')
 }
 
+function buildDefaultCtncDetails(count: number): CtncNodeDetail[] {
+  const validCount = Math.max(1, count)
+  return Array.from({ length: validCount }, () => ({
+    nodeId: 'CTN-C-V',
+    nomeAc: '',
+    marcaAc: '',
+    modeloAc: '',
+    capacidadeBtus: '',
+    tensaoFonte: '',
+  }))
+}
+
 export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }: RoomFormProps) {
   const isEditing = Boolean(initialRoom)
+  const [formStep, setFormStep] = useState<1 | 2>(1)
   const [name, setName] = useState(initialRoom?.name ?? '')
   const [deviceId, setDeviceId] = useState(initialRoom?.deviceId ?? buildDefaultCtnrNodeId())
   const [acCount, setAcCount] = useState(initialRoom?.acCount?.toString() ?? '1')
   const [sizeM2, setSizeM2] = useState(initialRoom?.sizeM2?.toString() ?? '')
   const [ctncNodeIds, setCtncNodeIds] = useState<string[]>(
     initialRoom?.ctncNodeIds?.length ? initialRoom.ctncNodeIds : buildDefaultCtncNodeIds(1)
+  )
+  const [ctncDetails, setCtncDetails] = useState<CtncNodeDetail[]>(
+    initialRoom?.ctncNodeIds?.length ? initialRoom.ctncNodeIds.map((id) => ({
+      nodeId: id,
+      nomeAc: '',
+      marcaAc: '',
+      modeloAc: '',
+      capacidadeBtus: '',
+      tensaoFonte: '',
+    })) : buildDefaultCtncDetails(1)
   )
   const [idealTempMin, setIdealTempMin] = useState(initialRoom?.idealTempMin?.toString() ?? '')
   const [idealTempMax, setIdealTempMax] = useState(initialRoom?.idealTempMax?.toString() ?? '')
@@ -68,12 +111,26 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
     }
   }, [serverError])
 
-  function updateCtncNodes(count: number) {
+  function updateCtncDetails(count: number) {
     setCtncNodeIds((prev) => {
       const validCount = Math.max(1, count)
       if (prev.length === validCount) return prev
       if (prev.length > validCount) return prev.slice(0, validCount)
       return [...prev, ...Array(validCount - prev.length).fill('CTN-C-V')]
+    })
+
+    setCtncDetails((prev) => {
+      const validCount = Math.max(1, count)
+      if (prev.length === validCount) return prev
+      if (prev.length > validCount) return prev.slice(0, validCount)
+      return [...prev, ...Array(validCount - prev.length).fill({
+        nodeId: 'CTN-C-V',
+        nomeAc: '',
+        marcaAc: '',
+        modeloAc: '',
+        capacidadeBtus: '',
+        tensaoFonte: '',
+      })]
     })
   }
 
@@ -81,7 +138,7 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
     setAcCount(value)
     const parsed = parseInt(value, 10)
     if (!isNaN(parsed)) {
-      updateCtncNodes(parsed)
+      updateCtncDetails(parsed)
     }
   }
 
@@ -101,7 +158,7 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
     return `${prefix}${version}-${rest}`
   }
 
-  function validate(): boolean {
+  function validateStep1(): boolean {
     const next: FormErrors = {}
 
     if (!name.trim()) {
@@ -135,20 +192,6 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
     if (!isNaN(ac) && ctncNodeIds.length !== ac) {
       next.acCount = 'O número de CTN-C deve corresponder à quantidade de ACs.'
     }
-
-    const seenCtnc = new Set<string>()
-    ctncNodeIds.forEach((id, index) => {
-      const trimmed = id.trim()
-      if (!trimmed) {
-        next.acCount = `CTN-C ${index + 1} não pode ficar vazio.`
-      } else if (!CTN_C_PATTERN.test(trimmed)) {
-        next.acCount = `CTN-C ${index + 1} deve seguir o padrão CTN-C-VX-XXX.`
-      } else if (seenCtnc.has(trimmed.toUpperCase())) {
-        next.acCount = `CTN-C duplicado: ${trimmed}`
-      } else {
-        seenCtnc.add(trimmed.toUpperCase())
-      }
-    })
 
     const min = parseFloat(idealTempMin)
     const max = parseFloat(idealTempMax)
@@ -188,15 +231,72 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
     return Object.keys(next).length === 0
   }
 
+  function validateStep2(): boolean {
+    const next: FormErrors = {}
+    const seenCtnc = new Set<string>()
+    let invalid = false
+
+    ctncDetails.forEach((detail, index) => {
+      const trimmedNodeId = detail.nodeId.trim()
+      if (!trimmedNodeId) {
+        invalid = true
+        next.ctncDetails = `CTN-C ${index + 1} deve ter um ID válido.`
+      } else if (!CTN_C_PATTERN.test(trimmedNodeId)) {
+        invalid = true
+        next.ctncDetails = `CTN-C ${index + 1} deve seguir o padrão CTN-C-VX-XXX.`
+      } else if (seenCtnc.has(trimmedNodeId.toUpperCase())) {
+        invalid = true
+        next.ctncDetails = `CTN-C duplicado: ${trimmedNodeId}`
+      } else {
+        seenCtnc.add(trimmedNodeId.toUpperCase())
+      }
+
+      if (!detail.nomeAc.trim() || !detail.marcaAc.trim() || !detail.modeloAc.trim()) {
+        invalid = true
+        next.ctncDetails = `Preencha todos os dados do AC para o CTN-C ${index + 1}.`
+      }
+
+      const capacidade = Number(detail.capacidadeBtus)
+      if (detail.capacidadeBtus.trim() === '' || Number.isNaN(capacidade) || capacidade <= 0) {
+        invalid = true
+        next.ctncDetails = `Capacidade de BTUs deve ser válida para o CTN-C ${index + 1}.`
+      }
+
+      const tensao = Number(detail.tensaoFonte)
+      if (detail.tensaoFonte.trim() === '' || Number.isNaN(tensao) || tensao <= 0) {
+        invalid = true
+        next.ctncDetails = `Tensão da fonte deve ser válida para o CTN-C ${index + 1}.`
+      }
+    })
+
+    setErrors(next)
+    return !invalid
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!validate()) return
+
+    if (formStep === 1) {
+      if (!validateStep1()) return
+      setFormStep(2)
+      return
+    }
+
+    if (!validateStep2()) return
 
     setIsLoading(true)
 
     try {
-      const roomData: Room = {
-        id: initialRoom?.id ?? '',
+      const roomData: Omit<Room, 'id' | 'createdAt'> & {
+        ctncNodes?: {
+          node_id: string
+          nome_ac: string
+          marca_ac: string
+          modelo_ac: string
+          capacidade_btus: number
+          tensao_fonte: number
+        }[]
+      } = {
         userId,
         clientId: initialRoom?.clientId ?? '',
         name: name.trim(),
@@ -207,8 +307,16 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
         idealTempMin: parseFloat(idealTempMin),
         idealTempMax: parseFloat(idealTempMax),
         targetTemp: targetTemp.trim() ? parseFloat(targetTemp) : undefined,
-        createdAt: initialRoom?.createdAt ?? '',
       }
+
+      roomData.ctncNodes = ctncDetails.map((detail) => ({
+        node_id: detail.nodeId.trim(),
+        nome_ac: detail.nomeAc.trim(),
+        marca_ac: detail.marcaAc.trim(),
+        modelo_ac: detail.modeloAc.trim(),
+        capacidade_btus: Number(detail.capacidadeBtus),
+        tensao_fonte: Number(detail.tensaoFonte),
+      }))
 
       await onSave(roomData)
     } catch (err) {
@@ -239,127 +347,240 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
           {serverError}
         </div>
       )}
-      <Input
-        label="Nome da sala"
-        id="room-name"
-        name="room-name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        error={errors.name}
-        required
-        placeholder="Ex: Sala de estar"
-      />
-
-      <Input
-        label="Identificador do dispositivo (CTN-R)"
-        id="room-device-id"
-        name="room-device-id"
-        value={deviceId}
-        onChange={(e) => setDeviceId(formatNodeInput(e.target.value, 'CTNR'))}
-        error={errors.deviceId}
-        required
-        disabled={isEditing}
-        placeholder="Ex: CTN-R-V1-000001"
-      />
-
-      <Input
-        label="Quantidade de ACs (1 CTN-C por AC)"
-        id="room-ac-count"
-        name="room-ac-count"
-        type="number"
-        value={acCount}
-        onChange={(e) => handleAcCountChange(e.target.value)}
-        error={errors.acCount}
-        placeholder="Ex: 1"
-        required
-        disabled={isEditing}
-      />
-
-      <Input
-        label="Tamanho da Sala (m²)"
-        id="room-size-m2"
-        name="room-size-m2"
-        type="number"
-        min={0.1}
-        step="0.1"
-        value={sizeM2}
-        onChange={(e) => setSizeM2(e.target.value)}
-        error={errors.sizeM2}
-        placeholder="Ex: 42.5"
-        required
-      />
-
       <div className="rounded-2xl p-4 bg-slate-50 border border-slate-200 text-sm text-slate-600 space-y-3">
-        <p className="font-medium text-slate-800">IDs de nodes CTN-C</p>
-        {ctncNodeIds.map((id, index) => (
+        <p className="font-medium text-slate-800">Passo {formStep} de 2</p>
+        <p className="text-sm text-slate-500">
+          {formStep === 1
+            ? 'Preencha as informações gerais da sala e a quantidade de ACs.'
+            : 'Agora informe os IDs dos CTN-C e os dados de cada AC.'}
+        </p>
+      </div>
+
+      {formStep === 1 ? (
+        <>
           <Input
-            key={`ctnc-${index}`}
-            label={`AC - ${index + 1}`}
-            id={`room-ctnc-${index}`}
-            name={`room-ctnc-${index}`}
-            value={id}
-            onChange={(e) => {
-              const next = [...ctncNodeIds]
-              next[index] = formatNodeInput(e.target.value, 'CTNC')
-              setCtncNodeIds(next)
-            }}
-            placeholder="CTN-C-V1-001"
+            label="Nome da sala"
+            id="room-name"
+            name="room-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            error={errors.name}
+            required
+            placeholder="Ex: Sala de estar"
+          />
+
+          <Input
+            label="Identificador do dispositivo (CTN-R)"
+            id="room-device-id"
+            name="room-device-id"
+            value={deviceId}
+            onChange={(e) => setDeviceId(formatNodeInput(e.target.value, 'CTNR'))}
+            error={errors.deviceId}
+            required
+            disabled={isEditing}
+            placeholder="Ex: CTN-R-V1-000001"
+          />
+
+          <Input
+            label="Quantidade de ACs (1 CTN-C por AC)"
+            id="room-ac-count"
+            name="room-ac-count"
+            type="number"
+            value={acCount}
+            onChange={(e) => handleAcCountChange(e.target.value)}
+            error={errors.acCount}
+            placeholder="Ex: 1"
+            required
+            disabled={isEditing}
+          />
+
+          <Input
+            label="Tamanho da Sala (m²)"
+            id="room-size-m2"
+            name="room-size-m2"
+            type="number"
+            min={0.1}
+            step="0.1"
+            value={sizeM2}
+            onChange={(e) => setSizeM2(e.target.value)}
+            error={errors.sizeM2}
+            placeholder="Ex: 42.5"
             required
           />
-        ))}
-      </div>
 
-      <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Input
-          label="Temp. ideal mínima (°C)"
-          id="room-temp-min"
-          name="room-temp-min"
-          type="number"
-          min={16}
-          max={30}
-          step="0.5"
-          value={idealTempMin}
-          onChange={(e) => setIdealTempMin(e.target.value)}
-          error={errors.idealTempMin}
-          required
-          placeholder="Ex: 18"
-        />
-        <Input
-          label="Temp. ideal máxima (°C)"
-          id="room-temp-max"
-          name="room-temp-max"
-          type="number"
-          min={16}
-          max={30}
-          step="0.5"
-          value={idealTempMax}
-          onChange={(e) => setIdealTempMax(e.target.value)}
-          error={errors.idealTempMax}
-          required
-          placeholder="Ex: 24"
-        />
-        <Input
-          label="Temp. alvo (°C)"
-          id="room-temp-target"
-          name="room-temp-target"
-          type="number"
-          step="0.5"
-          min={16}
-          max={30}
-          value={targetTemp}
-          onChange={(e) => setTargetTemp(e.target.value)}
-          error={errors.targetTemp}
-          required
-          placeholder="Ex: 22"
-        />
-      </div>
+          <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <Input
+              label="Temp. ideal mínima (°C)"
+              id="room-temp-min"
+              name="room-temp-min"
+              type="number"
+              min={16}
+              max={30}
+              step="0.5"
+              value={idealTempMin}
+              onChange={(e) => setIdealTempMin(e.target.value)}
+              error={errors.idealTempMin}
+              required
+              placeholder="Ex: 18"
+            />
+            <Input
+              label="Temp. ideal máxima (°C)"
+              id="room-temp-max"
+              name="room-temp-max"
+              type="number"
+              min={16}
+              max={30}
+              step="0.5"
+              value={idealTempMax}
+              onChange={(e) => setIdealTempMax(e.target.value)}
+              error={errors.idealTempMax}
+              required
+              placeholder="Ex: 24"
+            />
+            <Input
+              label="Temp. alvo (°C)"
+              id="room-temp-target"
+              name="room-temp-target"
+              type="number"
+              step="0.5"
+              min={16}
+              max={30}
+              value={targetTemp}
+              onChange={(e) => setTargetTemp(e.target.value)}
+              error={errors.targetTemp}
+              required
+              placeholder="Ex: 22"
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="rounded-2xl p-4 bg-slate-50 border border-slate-200 text-sm text-slate-600 space-y-3">
+            <p className="font-medium text-slate-800">Detalhes CTN-C / AC</p>
+            <p className="text-sm text-slate-500">Informe o ID de cada CTN-C e os dados do AC associado.</p>
+          </div>
+
+          {ctncDetails.map((detail, index) => (
+            <div key={`ctnc-detail-${index}`} className="rounded-2xl border border-slate-200 bg-white p-4 space-y-4">
+              <p className="font-semibold text-slate-800">CTN-C {index + 1}</p>
+              <Input
+                label="ID do CTN-C"
+                id={`room-ctnc-id-${index}`}
+                name={`room-ctnc-id-${index}`}
+                value={detail.nodeId}
+                onChange={(e) => {
+                  const formatted = formatNodeInput(e.target.value, 'CTNC')
+                  setCtncDetails((prev) => {
+                    const next = [...prev]
+                    next[index] = { ...next[index], nodeId: formatted }
+                    return next
+                  })
+                  setCtncNodeIds((prev) => {
+                    const next = [...prev]
+                    next[index] = formatted
+                    return next
+                  })
+                }}
+                placeholder="CTN-C-V1-000001"
+                required
+              />
+              <Input
+                label="Nome do AC"
+                id={`room-ctnc-name-${index}`}
+                name={`room-ctnc-name-${index}`}
+                value={detail.nomeAc}
+                onChange={(e) => {
+                  const next = [...ctncDetails]
+                  next[index] = { ...next[index], nomeAc: e.target.value }
+                  setCtncDetails(next)
+                }}
+                placeholder="AC Sala 501"
+                required
+              />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <Input
+                  label="Marca do AC"
+                  id={`room-ctnc-brand-${index}`}
+                  name={`room-ctnc-brand-${index}`}
+                  value={detail.marcaAc}
+                  onChange={(e) => {
+                    const next = [...ctncDetails]
+                    next[index] = { ...next[index], marcaAc: e.target.value }
+                    setCtncDetails(next)
+                  }}
+                  placeholder="LG, Samsung, Daikin"
+                  required
+                />
+                <Input
+                  label="Modelo do AC"
+                  id={`room-ctnc-model-${index}`}
+                  name={`room-ctnc-model-${index}`}
+                  value={detail.modeloAc}
+                  onChange={(e) => {
+                    const next = [...ctncDetails]
+                    next[index] = { ...next[index], modeloAc: e.target.value }
+                    setCtncDetails(next)
+                  }}
+                  placeholder="12000 BTU, Split Inverter"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <Input
+                  label="Capacidade (BTUs)"
+                  id={`room-ctnc-capacity-${index}`}
+                  name={`room-ctnc-capacity-${index}`}
+                  type="number"
+                  min={1}
+                  value={detail.capacidadeBtus}
+                  onChange={(e) => {
+                    const next = [...ctncDetails]
+                    next[index] = { ...next[index], capacidadeBtus: e.target.value }
+                    setCtncDetails(next)
+                  }}
+                  placeholder="12000"
+                  required
+                />
+                <Input
+                  label="Tensão da fonte (V)"
+                  id={`room-ctnc-voltage-${index}`}
+                  name={`room-ctnc-voltage-${index}`}
+                  type="number"
+                  min={1}
+                  value={detail.tensaoFonte}
+                  onChange={(e) => {
+                    const next = [...ctncDetails]
+                    next[index] = { ...next[index], tensaoFonte: e.target.value }
+                    setCtncDetails(next)
+                  }}
+                  placeholder="220"
+                  required
+                />
+              </div>
+            </div>
+          ))}
+
+          {errors.ctncDetails && (
+            <p className="text-xs text-red-600">{errors.ctncDetails}</p>
+          )}
+        </>
+      )}
 
       <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:justify-end">
+        {formStep === 2 && (
+          <Button type="button" variant="secondary" onClick={() => setFormStep(1)}>
+            Voltar
+          </Button>
+        )}
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancelar
         </Button>
         <Button type="submit" loading={isLoading}>
-          {initialRoom ? 'Salvar alterações' : 'Criar sala'}
+          {formStep === 1
+            ? 'Avançar'
+            : initialRoom
+            ? 'Salvar alterações'
+            : 'Criar sala'}
         </Button>
       </div>
     </form>

@@ -38,7 +38,7 @@ export default function NewRoomPage() {
 
   const userId = user?.id || ''
 
-  async function handleSave(roomData: Room) {
+  async function handleSave(roomData: Omit<Room, 'id' | 'createdAt'> & { ctncNodes?: { node_id: string; nome_ac: string; marca_ac: string; modelo_ac: string; capacidade_btus: number; tensao_fonte: number }[] }) {
     const clientId = isAllClientsView ? selectedClientId : (user?.role === 'admin_master'
       ? user.selectedClientId || ''
       : user?.clientId || '')
@@ -60,6 +60,7 @@ export default function NewRoomPage() {
         idealTempMin: roomData.idealTempMin,
         idealTempMax: roomData.idealTempMax,
         targetTemp: roomData.targetTemp,
+        ctncNodes: roomData.ctncNodes,
       })
       router.replace('/rooms')
     } catch (error) {

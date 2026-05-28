@@ -21,6 +21,15 @@ export interface Client {
   isActive: boolean; // Flag de ativação
 }
 
+export interface CtncNodeCreateData {
+  node_id: string;
+  nome_ac: string;
+  marca_ac: string;
+  modelo_ac: string;
+  capacidade_btus: number;
+  tensao_fonte: number;
+}
+
 export interface Room {
   id: string;
   userId: string;
@@ -30,6 +39,7 @@ export interface Room {
   acCount: number;
   sizeM2: number;
   ctncNodeIds?: string[];
+  ctncNodes?: CtncNodeCreateData[];
   location?: string;
   idealTempMin: number;
   idealTempMax: number;
@@ -44,6 +54,9 @@ export interface Ac {
   salaName?: string;
   nodeId: string;
   nomeAc: string;
+  marcaAc?: string;
+  modeloAc?: string;
+  capacidadeBtus?: number;
   nodeStatus?: string;
   nodeType?: string;
   nodeLastSeen?: string;
