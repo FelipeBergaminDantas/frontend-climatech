@@ -25,7 +25,16 @@ export default function RoomsPage() {
   const [roomActionPayload, setRoomActionPayload] = useState<{
     type: 'edit' | 'delete'
     room: Room
-    draft?: Room
+    draft?: Omit<Room, 'id' | 'createdAt'> & {
+      ctncNodes?: {
+        node_id: string
+        nome_ac: string
+        marca_ac: string
+        modelo_ac: string
+        capacidade_btus: number
+        tensao_fonte: number
+      }[]
+    }
   } | null>(null)
   const [roomSaveError, setRoomSaveError] = useState<string | null>(null)
   const [filterClient, setFilterClient] = useState<string>('all')
@@ -69,7 +78,18 @@ export default function RoomsPage() {
     )
   }
 
-  async function handleEditSave(roomData: Room) {
+  async function handleEditSave(
+    roomData: Omit<Room, 'id' | 'createdAt'> & {
+      ctncNodes?: {
+        node_id: string
+        nome_ac: string
+        marca_ac: string
+        modelo_ac: string
+        capacidade_btus: number
+        tensao_fonte: number
+      }[]
+    }
+  ) {
     if (!editingRoom) return
     setRoomSaveError(null)
     setRoomActionPayload({ type: 'edit', room: editingRoom, draft: roomData })

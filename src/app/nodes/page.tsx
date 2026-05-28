@@ -260,6 +260,8 @@ function CreateNodeModal({
   setNewAcModel,
   newAcCapacity,
   setNewAcCapacity,
+  newAcTensao,
+  setNewAcTensao,
   onCreate,
   isCreating,
   creationError,
