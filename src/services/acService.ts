@@ -21,6 +21,7 @@ function mapAcResponse(ac: AcResponse): Ac {
     marcaAc: ac.marca_ac,
     modeloAc: ac.modelo_ac,
     capacidadeBtus: ac.capacidade_btus,
+    tensaoFonte: ac.tensao_fonte,
     nodeStatus: ac.node_status,
     nodeType: ac.node_type,
     nodeLastSeen: ac.node_last_seen,

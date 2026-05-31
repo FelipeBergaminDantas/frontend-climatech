@@ -15,7 +15,7 @@ import type { AutomationRule, Client } from '@/types'
 export default function AutomationsPage() {
   const { user } = useAuth()
   const { rooms } = useRooms()
-  const { getRulesForRoom, activeCount, totalCount, createRule, updateRule, deleteRule, toggleRule, loadRules, loadStates } = useAutomations()
+  const { rules, getRulesForRoom, activeCount, totalCount, createRule, updateRule, deleteRule, toggleRule, loadRules, loadStates } = useAutomations()
   const { canCreate } = useClientStatus()
   
   const isOverviewMode = user?.role === 'admin_master' && !user?.selectedClientId
@@ -86,7 +86,7 @@ export default function AutomationsPage() {
   useEffect(() => {
     const roomsWithRules = roomsToDisplay.filter(room => getRulesForRoom(room.id).length > 0)
     roomsWithRules.forEach(room => loadStates(room.id))
-  }, [roomsToDisplay, getRulesForRoom, loadStates])
+  }, [roomsToDisplay, getRulesForRoom, loadStates, rules])
 
   // Poll automation states every 10 seconds to show real-time status
   useEffect(() => {
@@ -100,7 +100,7 @@ export default function AutomationsPage() {
     }, 10000)
 
     return () => clearInterval(interval)
-  }, [roomsToDisplay, getRulesForRoom, loadStates])
+  }, [roomsToDisplay, getRulesForRoom, loadStates, rules])
 
   // Salas disponíveis para criar automação (filtradas por cliente se em overview)
   const availableRoomsForCreation = isOverviewMode && selectedClientForRule

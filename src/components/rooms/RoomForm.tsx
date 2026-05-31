@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import type { Room } from '@/types'
+import { getAcsBySala } from '@/services/acService'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 
@@ -81,20 +82,44 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
   const [formStep, setFormStep] = useState<1 | 2>(1)
   const [name, setName] = useState(initialRoom?.name ?? '')
   const [deviceId, setDeviceId] = useState(initialRoom?.deviceId ?? buildDefaultCtnrNodeId())
-  const [acCount, setAcCount] = useState(initialRoom?.acCount?.toString() ?? '1')
+  const initialAcCount = Math.max(
+    1,
+    initialRoom
+      ? initialRoom.ctncNodes?.length
+        ? initialRoom.ctncNodes.length
+        : initialRoom.ctncNodeIds?.length ?? initialRoom.acCount ?? 1
+      : 1
+  )
+
+  const [acCount, setAcCount] = useState(initialAcCount.toString())
   const [sizeM2, setSizeM2] = useState(initialRoom?.sizeM2?.toString() ?? '')
   const [ctncNodeIds, setCtncNodeIds] = useState<string[]>(
-    initialRoom?.ctncNodeIds?.length ? initialRoom.ctncNodeIds : buildDefaultCtncNodeIds(1)
+    initialRoom?.ctncNodes?.length
+      ? initialRoom.ctncNodes.map((node) => node.node_id)
+      : initialRoom?.ctncNodeIds?.length
+        ? initialRoom.ctncNodeIds
+        : buildDefaultCtncNodeIds(1)
   )
   const [ctncDetails, setCtncDetails] = useState<CtncNodeDetail[]>(
-    initialRoom?.ctncNodeIds?.length ? initialRoom.ctncNodeIds.map((id) => ({
-      nodeId: id,
-      nomeAc: '',
-      marcaAc: '',
-      modeloAc: '',
-      capacidadeBtus: '',
-      tensaoFonte: '',
-    })) : buildDefaultCtncDetails(1)
+    initialRoom?.ctncNodes?.length
+      ? initialRoom.ctncNodes.map((node) => ({
+          nodeId: node.node_id,
+          nomeAc: node.nome_ac,
+          marcaAc: node.marca_ac,
+          modeloAc: node.modelo_ac,
+          capacidadeBtus: node.capacidade_btus?.toString() ?? '',
+          tensaoFonte: node.tensao_fonte?.toString() ?? '',
+        }))
+      : initialRoom?.ctncNodeIds?.length
+        ? initialRoom.ctncNodeIds.map((id) => ({
+            nodeId: id,
+            nomeAc: '',
+            marcaAc: '',
+            modeloAc: '',
+            capacidadeBtus: '',
+            tensaoFonte: '',
+          }))
+        : buildDefaultCtncDetails(1)
   )
   const [idealTempMin, setIdealTempMin] = useState(initialRoom?.idealTempMin?.toString() ?? '')
   const [idealTempMax, setIdealTempMax] = useState(initialRoom?.idealTempMax?.toString() ?? '')
@@ -110,6 +135,34 @@ export function RoomForm({ userId, onSave, onCancel, initialRoom, serverError }:
       setErrors((prev) => ({ ...prev, name: serverError }))
     }
   }, [serverError])
+
+  useEffect(() => {
+    async function loadExistingCtncDetails() {
+      if (!initialRoom?.id || !isEditing) return
+      if (initialRoom.ctncNodes?.length) return
+      if (!initialRoom.ctncNodeIds?.length) return
+
+      try {
+        const existingAcs = await getAcsBySala(initialRoom.id)
+        if (!existingAcs.length) return
+
+        setAcCount(existingAcs.length.toString())
+        setCtncNodeIds(existingAcs.map((ac) => ac.nodeId))
+        setCtncDetails(existingAcs.map((ac) => ({
+          nodeId: ac.nodeId,
+          nomeAc: ac.nomeAc,
+          marcaAc: ac.marcaAc ?? '',
+          modeloAc: ac.modeloAc ?? '',
+          capacidadeBtus: ac.capacidadeBtus?.toString() ?? '',
+          tensaoFonte: ac.tensaoFonte?.toString() ?? '',
+        })))
+      } catch (error) {
+        console.error('Failed to load AC metadata for room edit:', error)
+      }
+    }
+
+    loadExistingCtncDetails()
+  }, [initialRoom?.id, initialRoom?.ctncNodeIds?.length, initialRoom?.ctncNodes?.length, isEditing])
 
   function updateCtncDetails(count: number) {
     setCtncNodeIds((prev) => {

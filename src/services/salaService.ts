@@ -4,6 +4,7 @@ import type { Room } from '@/types'
 import { validateRoomName } from '@/utils/validators'
 import {
   getSalasFromBackend,
+  getNodesByClientFromBackend,
   createSalaInBackend,
   updateSalaInBackend,
   deleteSalaInBackend,
@@ -47,15 +48,23 @@ function mapSalaResponseToRoom(
   sala: ReturnType<typeof createSalaInBackend> extends Promise<infer T> ? T : never,
   overrides: Partial<Room> = {}
 ): Room {
+  const ctncNodeIds = overrides.ctncNodeIds?.length
+    ? overrides.ctncNodeIds
+    : parseCtncNodeIds(sala)
+
+  const acCount = overrides.acCount !== undefined
+    ? Math.max(1, overrides.acCount)
+    : Math.max(1, ctncNodeIds.length || sala.qtd_ac)
+
   return {
     id: sala.id,
     userId: overrides.userId ?? '',
     clientId: sala.client_id,
     name: sala.nome_sala,
     deviceId: sala.ctnr_node_id,
-    acCount: sala.qtd_ac,
+    acCount,
     sizeM2: sala.tam_sala_m2,
-    ctncNodeIds: parseCtncNodeIds(sala),
+    ctncNodeIds,
     location: overrides.location,
     idealTempMin: sala.temp_ideal_min,
     idealTempMax: sala.temp_ideal_max,
@@ -68,8 +77,27 @@ export async function getRooms(clientId: string): Promise<Room[]> {
   if (!clientId) return []
   
   return withCache(cacheKeys.rooms(clientId), async () => {
-    const salas = await getSalasFromBackend(clientId)
-    return salas.map((sala) => mapSalaResponseToRoom(sala))
+    const [salas, backendNodes] = await Promise.all([
+      getSalasFromBackend(clientId),
+      getNodesByClientFromBackend(clientId),
+    ])
+
+    const ctncIdsBySala = new Map<string, string[]>()
+    backendNodes.forEach((node) => {
+      if (node.node_type === 'CTN-C') {
+        const existing = ctncIdsBySala.get(node.sala_id) ?? []
+        existing.push(node.node_id)
+        ctncIdsBySala.set(node.sala_id, existing)
+      }
+    })
+
+    return salas.map((sala) => {
+      const ctncNodeIds = ctncIdsBySala.get(sala.id) ?? []
+      return mapSalaResponseToRoom(sala, {
+        ctncNodeIds,
+        acCount: Math.max(1, ctncNodeIds.length || sala.qtd_ac),
+      })
+    })
   })
 }
 
@@ -86,21 +114,21 @@ export async function createRoom(data: Omit<Room, 'id' | 'createdAt'>): Promise<
     ctnr_node_id: data.deviceId.trim(),
     ctnc_nodes: data.ctncNodes
       ? data.ctncNodes
-      : data.ctncNodeIds?.map((id) => ({
+      : data.ctncNodeIds?.map((id, index) => ({
           node_id: id.trim(),
-          nome_ac: '',
-          marca_ac: '',
-          modelo_ac: '',
-          capacidade_btus: 0,
-          tensao_fonte: 0,
+          nome_ac: `AC ${index + 1}`,
+          marca_ac: 'Marca padrão',
+          modelo_ac: 'Modelo padrão',
+          capacidade_btus: 12000,
+          tensao_fonte: 220,
         })) ??
-        buildCtncNodeIds(data.deviceId, data.acCount).map((id) => ({
+        buildCtncNodeIds(data.deviceId, data.acCount).map((id, index) => ({
           node_id: id,
-          nome_ac: '',
-          marca_ac: '',
-          modelo_ac: '',
-          capacidade_btus: 0,
-          tensao_fonte: 0,
+          nome_ac: `AC ${index + 1}`,
+          marca_ac: 'Marca padrão',
+          modelo_ac: 'Modelo padrão',
+          capacidade_btus: 12000,
+          tensao_fonte: 220,
         })),
   }
 

@@ -57,6 +57,7 @@ export interface Ac {
   marcaAc?: string;
   modeloAc?: string;
   capacidadeBtus?: number;
+  tensaoFonte?: number;
   nodeStatus?: string;
   nodeType?: string;
   nodeLastSeen?: string;

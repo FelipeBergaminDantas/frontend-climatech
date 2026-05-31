@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const { user, isAuthenticated, isLoading: authLoading } = useAuth()
   const { rooms, deviceStates, isLoading: roomsLoading, syncDeviceState } = useRooms()
-  const { activeCount: autoActive, totalCount: autoTotal } = useAutomations()
+  const { rules, activeCount: autoActive, totalCount: autoTotal, loadRules, loadStates } = useAutomations()
 
   const [selectedRoomId, setSelectedRoomId] = useState<string>('')
   
@@ -202,6 +202,24 @@ export default function DashboardPage() {
     }
   }, [dashboardClientFilter, isAllClientsView, filteredRooms])
 
+  useEffect(() => {
+    if (!currentClientId) return
+    loadRules(undefined, currentClientId).catch((error) => {
+      console.error('Failed to load automations for dashboard:', error)
+    })
+  }, [currentClientId, loadRules])
+
+  useEffect(() => {
+    if (rules.length === 0 || filteredRooms.length === 0) return
+
+    const roomsWithRules = filteredRooms.filter((room) => rules.some((rule) => rule.roomId === room.id))
+    roomsWithRules.forEach((room) => {
+      loadStates(room.id).catch((error) => {
+        console.error('Failed to load automation states for dashboard room:', room.id, error)
+      })
+    })
+  }, [filteredRooms, rules, loadStates])
+
   // Polling para modo ao vivo - atualiza cards a cada 2 segundos
   useEffect(() => {
     if (!liveModeState.isActive) return
@@ -229,6 +247,9 @@ export default function DashboardPage() {
 
   const selectedRoom = useMemo(() => filteredRooms.find(r => r.id === selectedRoomId), [filteredRooms, selectedRoomId])
   const selectedState = selectedRoomId ? deviceStates[selectedRoomId] : undefined
+
+  const totalAcs = filteredRooms.reduce((sum, room) => sum + room.acCount, 0)
+  const activeAcs = filteredRooms.reduce((sum, room) => sum + (deviceStates[room.id]?.isOn ? room.acCount : 0), 0)
 
   const isLoading = roomsLoading || (isAllClientsView && isLoadingClients)
   if (!isAuthenticated && !authLoading) return null
@@ -351,7 +372,7 @@ export default function DashboardPage() {
             {/* Summary stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <StatCard label="Total de salas" value={String(totalRooms)} sub="cadastradas" />
-              <StatCard label="ACs ligados" value={String(onlineCount)} sub={`de ${totalRooms}`} color="#10c98f" />
+              <StatCard label="ACs ligados" value={String(activeAcs)} sub={`de ${totalAcs}`} color="#10c98f" />
               <StatCard label="Temp. média" value={`${avgTemp}°C`} sub="todas as salas" color="#1e5fa8" />
               <StatCard label="Automações" value={`${autoActive}/${autoTotal}`} sub="ativas" color="#0ea5a0" />
             </div>

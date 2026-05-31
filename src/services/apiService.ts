@@ -117,6 +117,7 @@ export interface AcResponse {
   marca_ac?: string;
   modelo_ac?: string;
   capacidade_btus?: number;
+  tensao_fonte?: number;
   node_status?: string;
   node_type?: string;
   node_last_seen?: string;
@@ -654,12 +655,19 @@ export async function deleteAcInBackend(id: string): Promise<boolean> {
  * Create sala in backend
  */
 export async function createSalaInBackend(data: SalaCreateRequest): Promise<SalaDetailResponse> {
-  const response = await fetch(`${API_BASE_URL}/salas`, {
-    method: 'POST',
-    headers: buildHeaders(),
-    credentials: 'include',
-    body: JSON.stringify(data),
-  })
+  let response: Response
+
+  try {
+    response = await fetch(`${API_BASE_URL}/salas`, {
+      method: 'POST',
+      headers: buildHeaders(),
+      credentials: 'include',
+      body: JSON.stringify(data),
+    })
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Falha ao conectar com o backend em ${API_BASE_URL}: ${message}`)
+  }
 
   if (!response.ok) {
     const error = await response.json().catch(() => null)
