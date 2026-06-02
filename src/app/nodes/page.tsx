@@ -71,10 +71,10 @@ function NodeCommandModal({ node, onClose, onUpdate, onDelete, isUpdating, isDel
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center px-0 sm:px-4"
       style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden" style={{ background: 'white' }}>
+      <div className="w-full sm:max-w-md rounded-t-2xl sm:rounded-2xl overflow-hidden flex flex-col max-h-[100vh] sm:max-h-[90vh]" style={{ background: 'white' }}>
 
         {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5" style={{ borderBottom: '1px solid #e8edf5' }}>
+        <div className="flex-shrink-0 flex items-start justify-between px-6 py-5" style={{ borderBottom: '1px solid #e8edf5' }}>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
@@ -92,14 +92,14 @@ function NodeCommandModal({ node, onClose, onUpdate, onDelete, isUpdating, isDel
             <p className="text-xs font-mono text-slate-500">{node.id}</p>
             <p className="text-sm font-semibold" style={{ color: '#0f2744' }}>{node.roomName} · Par {node.pairId}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors mt-1" aria-label="Fechar">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors mt-1 flex-shrink-0" aria-label="Fechar">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
           {/* Command 1: Request Status */}
           <div className="rounded-xl p-4 space-y-3" style={{ background: '#f8fafc', border: '1px solid #e8edf5' }}>
@@ -203,7 +203,7 @@ function NodeCommandModal({ node, onClose, onUpdate, onDelete, isUpdating, isDel
             />
             {node.type === 'CTNC' && (
               <p className="text-xs text-slate-400 mt-2">
-                AC - {node.acIndex ?? 1} · ID do CTN-C: <span className="font-mono">{node.id}</span>
+                {node.nomeAc || `AC ${node.acIndex ?? 1}`} · ID do CTN-C: <span className="font-mono">{node.id}</span>
               </p>
             )}
 
@@ -296,20 +296,20 @@ function CreateNodeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)' }}>
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid #e8edf5' }}>
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+        <div className="flex-shrink-0 flex items-center justify-between px-6 py-5" style={{ borderBottom: '1px solid #e8edf5' }}>
           <div>
             <h2 className="text-lg font-semibold" style={{ color: '#0f2744' }}>Adicionar novo CTN-C</h2>
             <p className="text-sm text-slate-500 mt-1">Crie um CTN-C vinculado a uma sala existente.</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors" aria-label="Fechar">
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0" aria-label="Fechar">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
-        <div className="space-y-5 px-6 py-6">
+        <div className="flex-1 overflow-y-auto space-y-5 px-6 py-6">
           {isOverviewMode && clientIds.length > 0 && (
             <div>
               <label className="block text-sm font-medium mb-2" style={{ color: '#0f2744' }}>Cliente</label>
@@ -411,24 +411,24 @@ function CreateNodeModal({
           {creationError && (
             <p className="text-xs text-red-600">{creationError}</p>
           )}
+        </div>
 
-          <div className="flex justify-end gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={onCreate}
-              disabled={isCreating || roomOptions.length === 0}
-              className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-            >
-              {isCreating ? 'Criando...' : 'Criar CTN-C'}
-            </button>
-          </div>
+        <div className="flex-shrink-0 flex justify-end gap-3 px-6 py-5 border-t border-slate-200">
+          <button
+            type="button"
+            onClick={onClose}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={isCreating || roomOptions.length === 0}
+            className="inline-flex items-center justify-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            {isCreating ? 'Criando...' : 'Criar CTN-C'}
+          </button>
         </div>
       </div>
     </div>
@@ -469,7 +469,7 @@ function NodeCard({ node, onSelect }: { node: ClimaTechNode; onSelect: (n: Clima
         </p>
         {node.type === 'CTNC' && (
           <p className="text-xs text-slate-400 mt-0.5">
-            AC - {node.acIndex ?? 1} · Sala: {node.roomName}
+            {node.nomeAc || `AC ${node.acIndex ?? 1}`} · Sala: {node.roomName}
           </p>
         )}
       </div>

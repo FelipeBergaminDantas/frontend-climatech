@@ -370,6 +370,12 @@ export default function AcTempsPage() {
                 <p className="mt-1 text-xs text-slate-500">Deve ser um valor entre 1 e 100.000 BTU</p>
               </div>
 
+              {error && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 pt-4">
                 <button
                   type="button"

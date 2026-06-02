@@ -5,10 +5,12 @@ import {
   updateNodeInBackend,
   deleteNodeInBackend,
 } from '@/services/apiService'
+import { getAcs } from '@/services/acService'
 
 let nodes: ClimaTechNode[] = []
+let acNameCache: Map<string, string> = new Map()
 
-function mapBackendNode(node: any, roomName: string): ClimaTechNode {
+function mapBackendNode(node: any, roomName: string, nomeAc?: string): ClimaTechNode {
   const type = node.node_type === 'CTN-R' ? 'CTNR' : 'CTNC'
   const status = (node.ultimo_status || '').toLowerCase().includes('online') ? 'online' : 'offline'
   const lastSeen = node.dth_ultimo_status_at ? new Date(node.dth_ultimo_status_at).toISOString() : new Date().toISOString()
@@ -29,6 +31,7 @@ function mapBackendNode(node: any, roomName: string): ClimaTechNode {
     status: status as NodeStatus,
     lastSeen,
     acIndex,
+    nomeAc,
   }
 }
 
@@ -46,14 +49,27 @@ export async function loadNodesForClient(clientId: string, rooms: { id: string; 
     const backendNodes = await getNodesByClientFromBackend(clientId)
     console.log('[nodeService] Backend nodes loaded:', backendNodes)
     
+    // Load ACs to get nomeAc for each node
+    try {
+      const acs = await getAcs(clientId)
+      acNameCache.clear()
+      acs.forEach((ac) => {
+        acNameCache.set(ac.nodeId, ac.nomeAc)
+      })
+      console.log('[nodeService] AC name cache populated:', Object.fromEntries(acNameCache))
+    } catch (err) {
+      console.warn('[nodeService] Could not load ACs for name cache:', err)
+    }
+    
     const roomMap = new Map(rooms.map((room) => [room.id, room.name]))
     const roomIds = new Set(rooms.map((room) => room.id))
     console.log('[nodeService] Room map:', Object.fromEntries(roomMap))
 
     const mapped = backendNodes.map((node) => {
       const roomName = roomMap.get(node.sala_id) ?? ''
-      console.log(`[nodeService] Mapping node ${node.node_id}:`, { sala_id: node.sala_id, foundRoomName: roomName })
-      return mapBackendNode(node, roomName)
+      const nomeAc = acNameCache.get(node.node_id)
+      console.log(`[nodeService] Mapping node ${node.node_id}:`, { sala_id: node.sala_id, foundRoomName: roomName, nomeAc })
+      return mapBackendNode(node, roomName, nomeAc)
     })
     
     console.log('[nodeService] Mapped nodes:', mapped)
@@ -147,7 +163,8 @@ export async function addCtncNode(
     })
     console.log('[nodeService] Backend returned:', created)
     
-    const mapped = mapBackendNode(created, roomName)
+    const mapped = mapBackendNode(created, roomName, nomeAc.trim())
+    acNameCache.set(normalized, nomeAc.trim())
     console.log('[nodeService] Mapped node:', mapped)
     
     nodes.push(mapped)

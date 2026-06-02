@@ -150,4 +150,5 @@ export interface ClimaTechNode {
   status: NodeStatus;
   lastSeen: string;     // ISO timestamp
   acIndex?: number;     // CTNC only — which AC unit (1, 2, 3...)
+  nomeAc?: string;      // CTNC only — friendly name of AC unit
 }
