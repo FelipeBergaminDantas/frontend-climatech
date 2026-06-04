@@ -14,9 +14,12 @@ import { withCache, cacheKeys, cacheDelete } from '@/services/cacheService'
 function formatBrazilTimestamp(value: string | null | undefined): string | undefined {
   if (!value) return undefined
   const raw = String(value).trim()
-  if (raw.includes('-03:00') || raw.includes('-03:')) return raw
-  const parsed = new Date(raw.includes('T') ? raw : raw.replace(' ', 'T'))
+  if (!raw) return undefined
+
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T')
+  const parsed = new Date(normalized)
   if (Number.isNaN(parsed.getTime())) return raw
+
   const parts = new Intl.DateTimeFormat('sv-SE', {
     timeZone: 'America/Sao_Paulo',
     year: 'numeric',
@@ -28,7 +31,11 @@ function formatBrazilTimestamp(value: string | null | undefined): string | undef
     hour12: false,
   }).formatToParts(parsed)
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '00'
-  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}-03:00`
+  const datePart = `${get('year')}-${get('month')}-${get('day')}`
+  const timePart = `${get('hour')}:${get('minute')}:${get('second')}`
+  const fractionMatch = normalized.match(/\.(\d{1,6})/)
+  const fraction = fractionMatch ? `.${fractionMatch[1].padEnd(6, '0')}` : ''
+  return `${datePart}T${timePart}${fraction}-03:00`
 }
 
 /** Converte hora do backend (TIME ou timestamptz) para HH:MM em Brasília. */

@@ -5,28 +5,33 @@ import type { AutomationRule, AutomationState } from '@/types'
 import * as automationService from '@/services/automationService'
 
 function formatAutomationRuntimeStatus(state: AutomationState): string | undefined {
-  if (state.status) {
-    return state.status
-  }
+  // Apply canonical rules (latest event already returned by backend):
+  // 1) If latest event has dthFimExecucao null and comandoEnviado == power_off => "POWER OFF PREVENTIVO ENVIADO"
+  // 2) If latest event comandoEnviado == power_on => "EM EXECUCAO"
+  // 3) If latest event has dthFimExecucao not null and comandoEnviado == power_off => "AUTOMACAO FINALIZADA"
+  // 4) Else => "DESLIGADO"
 
-  if (state.flEmExecucao) {
-    return 'EM_EXECUCAO'
-  }
+  try {
+    const cmd = state.comandoEnviado ? String(state.comandoEnviado).trim().toLowerCase() : undefined
+    const hasFim = Boolean(state.dthFimExecucao)
 
-  if (state.comandoEnviado) {
-    return state.comandoEnviado
-  }
+    // Apply user's exact display strings (do not change casing or format)
+    if (!hasFim && cmd === 'power_off') return 'PowerOff preventivo enviado'
+    if (cmd === 'power_on') return 'Em execução'
+    if (hasFim && cmd === 'power_off') return 'Automação finalizada'
 
-  if (state.dthUltimaExecucao) {
-    return `Última execução: ${new Date(state.dthUltimaExecucao).toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })}`
+    return undefined
+  } catch (err) {
+    if (state.dthUltimaExecucao) {
+      return `Última execução: ${new Date(state.dthUltimaExecucao).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`
+    }
+    return undefined
   }
-
-  return undefined
 }
 
 interface AutomationsContextValue {
@@ -108,9 +113,16 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
 
   const toggleRule = useCallback(async (id: string, password?: string) => {
     const updated = await automationService.toggleRule(id, password)
-    setRules(prev => prev.map(r => (r.id === id ? updated : r)))
+    setRules(prev => prev.map(r => {
+      if (r.id !== id) return r
+      return {
+        ...updated,
+        runtimeStatus: r.runtimeStatus,
+      }
+    }))
+    await loadStates(updated.roomId)
     return updated
-  }, [])
+  }, [loadStates])
 
   const createRule = useCallback(async (data: {
     clientId?: string
@@ -130,8 +142,9 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
   }, password?: string) => {
     const created = await automationService.createRule(data, password)
     setRules(prev => [...prev, created])
+    await loadStates(created.roomId)
     return created
-  }, [])
+  }, [loadStates])
 
   const updateRule = useCallback(async (
     id: string,
@@ -153,14 +166,25 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
     password?: string
   ) => {
     const updated = await automationService.updateRule(id, data, password)
-    setRules(prev => prev.map(r => (r.id === id ? updated : r)))
+    setRules(prev => prev.map(r => {
+      if (r.id !== id) return r
+      return {
+        ...updated,
+        runtimeStatus: r.runtimeStatus,
+      }
+    }))
+    await loadStates(updated.roomId)
     return updated
-  }, [])
+  }, [loadStates])
 
   const deleteRule = useCallback(async (id: string, password?: string) => {
+    const ruleToDelete = rules.find((rule) => rule.id === id)
     await automationService.deleteRule(id, password)
     setRules(prev => prev.filter(r => r.id !== id))
-  }, [])
+    if (ruleToDelete) {
+      await loadStates(ruleToDelete.roomId)
+    }
+  }, [loadStates, rules])
 
   const getRulesForRoom = useCallback((roomId: string) => {
     return rules.filter(r => r.roomId === roomId)

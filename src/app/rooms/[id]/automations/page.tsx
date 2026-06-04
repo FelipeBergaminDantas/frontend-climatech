@@ -88,12 +88,14 @@ export default function AutomationsPage({ params }: PageProps) {
         prioridade: data.prioridade,
       })
     }
+    await loadStates(id)
     setIsFormOpen(false)
     setEditingRule(undefined)
   }
 
-  function handleToggle(ruleId: string) {
-    toggleRule(ruleId)
+  async function handleToggle(ruleId: string) {
+    await toggleRule(ruleId)
+    await loadStates(id)
   }
 
   function handleEdit(rule: AutomationRule) {
@@ -102,9 +104,10 @@ export default function AutomationsPage({ params }: PageProps) {
     setIsFormOpen(true)
   }
 
-  function handleDelete(ruleId: string) {
+  async function handleDelete(ruleId: string) {
     if (!isAdmin) return
-    deleteRule(ruleId)
+    await deleteRule(ruleId)
+    await loadStates(id)
   }
 
   return (
