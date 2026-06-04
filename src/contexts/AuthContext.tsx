@@ -85,6 +85,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(loggedIn)
       setUseLocalStorage(rememberMe)
       persistUser(loggedIn, rememberMe)
+
+      if (loggedIn.role === 'admin_master') {
+        await authService.clearMqttMessages().catch(() => {
+          // Ignore clear errors to avoid blocking login
+        })
+      }
+
       return loggedIn
     } finally {
       setIsLoading(false)
@@ -92,6 +99,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function logout() {
+    if (user?.role === 'admin_master') {
+      await authService.clearMqttMessages().catch(() => {
+        // Ignore clear errors and continue with logout
+      })
+    }
     await authService.logout()
     setUser(null)
     localStorage.removeItem(SESSION_KEY)

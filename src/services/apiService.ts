@@ -180,7 +180,7 @@ export async function readApiError(response: Response, fallback: string): Promis
   }
 }
 
-function buildHeaders(contentType = true): Record<string, string> {
+export function buildHeaders(contentType = true): Record<string, string> {
   const headers: Record<string, string> = {}
   if (contentType) {
     headers['Content-Type'] = 'application/json'
@@ -201,8 +201,14 @@ export async function getClientesFromBackend(onlyActive = true): Promise<Cliente
     const response = await fetch(`${API_BASE_URL}/clientes?${queryString}`, {
       method: 'GET',
       headers: buildHeaders(false),
+      credentials: 'include',
     });
-    if (!response.ok) throw new Error('Failed to fetch clientes');
+
+    if (!response.ok) {
+      const message = await readApiError(response, 'Failed to fetch clientes')
+      throw new Error(message)
+    }
+
     const result: ApiResponse<ClienteResponse[]> = await response.json();
     return result.data;
   } catch (error) {
@@ -430,11 +436,14 @@ export async function getAutomationStatesFromBackend(salaId: string): Promise<Au
   const response = await fetch(`${API_BASE_URL}/automacoes/states?sala_id=${encodeURIComponent(salaId)}`, {
     method: 'GET',
     headers: buildHeaders(false),
+    credentials: 'include',
   })
+
   if (!response.ok) {
-    const error = await response.json().catch(() => null)
-    throw new Error(error?.message || 'Failed to fetch automation states')
+    const message = await readApiError(response, 'Failed to fetch automation states')
+    throw new Error(message)
   }
+
   const result: ApiResponse<AutomationStateResponse[]> = await response.json()
   return result.data
 }
@@ -730,9 +739,9 @@ export async function getNodesByClientFromBackend(clientId: string): Promise<Nod
 
     console.log('[apiService] Response status:', response.status, response.statusText)
     if (!response.ok) {
-      const error = await response.json().catch(() => null)
-      console.error('[apiService] Error response:', error)
-      throw new Error(error?.message || `Failed to load nodes (${response.status})`)
+      const message = await readApiError(response, `Failed to load nodes (${response.status})`)
+      console.error('[apiService] Error response status:', response.status, 'message:', message)
+      throw new Error(message)
     }
 
     const result: ApiResponse<NodeResponse[]> = await response.json()

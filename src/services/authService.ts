@@ -1,6 +1,6 @@
 import type { User } from '@/types';
 import { ACCESS_TOKEN_KEY } from '@/config/constants';
-import { API_BASE_URL } from '@/services/apiService';
+import { API_BASE_URL, buildHeaders } from '@/services/apiService';
 import { validatePassword } from '@/utils/validators';
 
 const users: Array<User & { password: string }> = [];
@@ -67,6 +67,16 @@ export async function logout(): Promise<void> {
     // Ignore logout errors to preserve client state
   });
   clearSession();
+}
+
+export async function clearMqttMessages(): Promise<void> {
+  await fetch(`${API_BASE_URL}/admin/mqtt/messages`, {
+    method: 'DELETE',
+    headers: buildHeaders(false),
+    credentials: 'include',
+  }).catch(() => {
+    // Ignore clear errors since logout should proceed regardless
+  });
 }
 
 export async function refreshAccessToken(): Promise<void> {

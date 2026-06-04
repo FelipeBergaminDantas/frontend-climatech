@@ -80,6 +80,17 @@ const NAV_LINKS: NavLink[] = [
     ),
   },
   {
+    href: '/admin/mqtt-terminal',
+    label: 'Terminal MQTT',
+    adminMasterOnly: true,
+    icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} fill="none" aria-hidden="true">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 5h18M7 9h10M7 13h10M7 17h10" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 5v14a2 2 0 002 2h14a2 2 0 002-2V5" />
+      </svg>
+    ),
+  },
+  {
     href: '/automations',
     label: 'Automações',
     icon: (
@@ -156,9 +167,9 @@ export function Sidebar() {
   // Verifica se está na visão de todos os clientes (admin_master sem cliente selecionado)
   const isAllClientsView = user?.role === 'admin_master' && !user.selectedClientId
 
-  function handleLogout() {
+  async function handleLogout() {
     showLoading()
-    logout()
+    await logout()
     router.replace('/login')
   }
 

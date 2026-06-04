@@ -62,8 +62,8 @@ export default function SelectClientPage() {
     router.push('/clients')
   }
 
-  const handleReturnToLogin = () => {
-    logout()
+  const handleReturnToLogin = async () => {
+    await logout()
     router.replace('/login')
   }
 

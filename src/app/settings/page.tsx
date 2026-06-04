@@ -191,7 +191,11 @@ export default function SettingsPage() {
 
         <section className="rounded-2xl p-6" style={{ background: 'white', border: '1px solid #fee2e2' }}>
           <h2 className="font-semibold mb-3" style={{ color: '#0f2744' }}>Sessão</h2>
-          <button onClick={() => { logout(); router.replace('/login') }}
+          <button
+            onClick={async () => {
+              await logout()
+              router.replace('/login')
+            }}
             className="px-4 py-2 rounded-xl text-sm font-medium text-white"
             style={{ background: '#ef4444' }}>
             Sair da conta
