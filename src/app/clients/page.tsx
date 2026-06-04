@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
 import { getAllClients, getClientName } from '@/services/clientService'
-import { getNodesByClientFromBackend, type NodeResponse } from '@/services/apiService'
+import { getNodesByClientFromBackend, getAllNodesStatusFromBackend, type NodeResponse } from '@/services/apiService'
 import { useRouter } from 'next/navigation'
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -26,6 +26,7 @@ export default function OverviewPage() {
   const [selectedClientId, setSelectedClientId] = useState<string>('all')
   const [clients, setClients] = useState<Array<{id: string, name: string, isActive: boolean}>>([])
   const [clientNodes, setClientNodes] = useState<Record<string, NodeResponse[]>>({})
+  const [nodeStatuses, setNodeStatuses] = useState<Record<string, { online: boolean; mqtt: boolean; lastHeartbeat: string | null; secondsSinceLastHeartbeat: number | null }>>({})
   const [isLoadingClients, setIsLoadingClients] = useState(true)
   const [isLoadingNodeCounts, setIsLoadingNodeCounts] = useState(false)
   
@@ -74,6 +75,17 @@ export default function OverviewPage() {
         if (mounted) {
           setClientNodes(Object.fromEntries(entries))
         }
+        // fetch statuses for all nodes once
+        try {
+          const statuses = await getAllNodesStatusFromBackend()
+          if (mounted) {
+            const map: Record<string, any> = {}
+            statuses.forEach(s => { map[s.nodeId] = s })
+            setNodeStatuses(map)
+          }
+        } catch (err) {
+          console.error('[clientsPage] failed to load node statuses', err)
+        }
       } catch (error) {
         console.error('[clientsPage] Error loading client nodes:', error)
         if (mounted) setClientNodes({})
@@ -120,9 +132,17 @@ export default function OverviewPage() {
   const totalACs = filteredRooms.reduce((sum, room) => sum + room.acCount, 0)
   const totalRooms = filteredRooms.length
 
-  // Dispositivos online/offline (baseado em nodes, não rooms)
-  const nodesOnline = filteredNodes.filter(n => (n.ultimo_status || '').toLowerCase().includes('online')).length
-  const nodesOffline = filteredNodes.filter(n => !(n.ultimo_status || '').toLowerCase().includes('online')).length
+  // Dispositivos online/offline/never connected based on heartbeat status
+  const nodesOnline = filteredNodes.filter((n) => {
+    const s = nodeStatuses[n.node_id]
+    if (!s || s.lastHeartbeat === null) return false
+    return s.online && (s.secondsSinceLastHeartbeat == null || s.secondsSinceLastHeartbeat <= 120)
+  }).length
+  const nodesNeverConnected = filteredNodes.filter(n => {
+    const s = nodeStatuses[n.node_id]
+    return !s || s.lastHeartbeat === null
+  }).length
+  const nodesOffline = filteredNodes.length - nodesOnline - nodesNeverConnected
 
   // Temperaturas por estado (crítico, atenção, correto)
   const roomsCritical = filteredRooms.filter(r => {
@@ -258,7 +278,7 @@ export default function OverviewPage() {
                   />
                 </div>
               </div>
-              
+
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-sm font-medium" style={{ color: '#ef4444' }}>Offline</span>
@@ -270,6 +290,22 @@ export default function OverviewPage() {
                     style={{ 
                       width: `${totalDevices > 0 ? (nodesOffline / totalDevices) * 100 : 0}%`,
                       background: 'linear-gradient(90deg, #ef4444, #dc2626)'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium" style={{ color: '#64748b' }}>Nunca conectado</span>
+                  <span className="text-sm font-bold" style={{ color: '#64748b' }}>{nodesNeverConnected}</span>
+                </div>
+                <div className="h-8 rounded-lg overflow-hidden" style={{ background: '#f1f5f9' }}>
+                  <div 
+                    className="h-full transition-all duration-500"
+                    style={{ 
+                      width: `${totalDevices > 0 ? (nodesNeverConnected / totalDevices) * 100 : 0}%`,
+                      background: 'linear-gradient(90deg, #94a3b8, #64748b)'
                     }}
                   />
                 </div>

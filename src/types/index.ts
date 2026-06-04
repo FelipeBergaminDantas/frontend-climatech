@@ -138,7 +138,7 @@ export interface ThemePreferences {
 export type IndicatorStatus = 'ok' | 'warning' | 'critical';
 
 export type NodeType = 'CTNR' | 'CTNC';
-export type NodeStatus = 'online' | 'offline';
+export type NodeStatus = 'online' | 'offline' | 'never_connected';
 
 export interface ClimaTechNode {
   id: string;           // CTN-R-V1-{MAC} or CTN-C-V1-{MAC}

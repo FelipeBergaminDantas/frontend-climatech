@@ -4,18 +4,30 @@ import { useState, useMemo, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
 import { useClientStatus } from '@/hooks/useClientStatus'
-import { addCtncNode, deleteNode, loadNodesForClient, updateNode } from '@/services/nodeService'
+import { addCtncNode, deleteNode, loadNodesForClient, updateNode, verifyNodeStatus } from '@/services/nodeService'
 import { verifyCurrentPassword } from '@/services/userService'
 import { getClientName } from '@/services/clientService'
+import { getAllNodesStatusFromBackend, NodeVerifyResponse } from '@/services/apiService'
 import { Button } from '@/components/ui/Button'
 import { PasswordConfirmModal } from '@/components/ui/PasswordConfirmModal'
 import type { ClimaTechNode, NodeStatus, NodeType } from '@/types'
 
 const TYPE_LABEL: Record<string, string> = { CTNR: 'CTN-R', CTNC: 'CTN-C' }
 
+function normalizeIsoTimestamp(value: string): string {
+  const raw = value?.trim()
+  if (!raw) return ''
+  const normalized = raw.replace(' ', 'T')
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(normalized)) {
+    return `${normalized}Z`
+  }
+  return normalized
+}
+
 const STATUS_CONFIG: Record<NodeStatus, { label: string; color: string; bg: string; dot: string }> = {
-  online:  { label: 'Online',  color: '#10c98f', bg: 'rgba(16,201,143,0.1)',  dot: '#10c98f' },
-  offline: { label: 'Offline', color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', dot: '#94a3b8' },
+  online:  { label: 'Online',          color: '#10c98f', bg: 'rgba(16,201,143,0.1)',  dot: '#10c98f' },
+  offline: { label: 'Offline',         color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', dot: '#94a3b8' },
+  never_connected: { label: 'Nunca conectado', color: '#64748b', bg: 'rgba(148,163,184,0.04)', dot: '#64748b' },
 }
 
 // IR commands available for CTN-C learning mode
@@ -25,7 +37,12 @@ type IrCommand = typeof IR_COMMANDS[number]
 type CommandState = 'idle' | 'running' | 'success' | 'error'
 
 function formatLastSeen(iso: string): string {
-  const diff = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (!iso) return 'Nunca conectado'
+  const normalized = normalizeIsoTimestamp(iso)
+  const ts = new Date(normalized).getTime()
+  if (isNaN(ts)) return 'Nunca conectado'
+  const diff = Math.floor((Date.now() - ts) / 1000)
+  if (diff <= 0) return 'agora'
   if (diff < 60) return `${diff}s atrás`
   if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`
@@ -33,7 +50,7 @@ function formatLastSeen(iso: string): string {
 }
 
 // ── Node command modal ─────────────────────────────────────────────────────────
-function NodeCommandModal({ node, onClose, onUpdate, onDelete, isUpdating, isDeleting, actionError }: { node: ClimaTechNode; onClose: () => void; onUpdate: (node: ClimaTechNode, newNodeId?: string) => void; onDelete: (node: ClimaTechNode) => void; isUpdating: boolean; isDeleting: boolean; actionError: string }) {
+function NodeCommandModal({ node, onClose, onUpdate, onDelete, onVerifyStatus, isUpdating, isDeleting, actionError }: { node: ClimaTechNode; onClose: () => void; onUpdate: (node: ClimaTechNode, newNodeId?: string) => void; onDelete: (node: ClimaTechNode) => void; onVerifyStatus: (node: ClimaTechNode, result: NodeVerifyResponse) => void; isUpdating: boolean; isDeleting: boolean; actionError: string }) {
   const cfg = STATUS_CONFIG[node.status]
   const isCTNR = node.type === 'CTNR'
 
@@ -51,13 +68,21 @@ function NodeCommandModal({ node, onClose, onUpdate, onDelete, isUpdating, isDel
   async function handleRequestStatus() {
     setStatusCmd('running')
     setStatusResult('')
-    // Simulate MQTT command round-trip
-    await new Promise(r => setTimeout(r, 1200))
-    const isOnline = node.status === 'online'
-    setStatusCmd(isOnline ? 'success' : 'error')
-    setStatusResult(isOnline
-      ? `Node respondeu: online · fw ${node.firmwareVersion} · visto agora`
-      : `Node não respondeu. Último contato: ${formatLastSeen(node.lastSeen)}`)
+
+    try {
+      const result = await verifyNodeStatus(node.id)
+      const isOnline = result.success && result.deviceStatus === 'online'
+
+      setStatusCmd(isOnline ? 'success' : 'error')
+      setStatusResult(result.message || (isOnline
+        ? `Node respondeu: online · fw ${result.version ?? (node.firmwareVersion || 'N/A')} · visto agora`
+        : `Node não respondeu. Último contato: ${formatLastSeen(node.lastSeen)}`))
+      onVerifyStatus(node, result)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erro ao verificar status do node.'
+      setStatusCmd('error')
+      setStatusResult(message)
+    }
   }
 
   async function handleLearnMode() {
@@ -617,7 +642,8 @@ export default function NodesPage() {
 
         console.log('[nodesPage] Nodes loaded:', loadedPerClient.flat().length)
         if (mounted) {
-          setNodes(loadedPerClient.flat())
+          const loaded = loadedPerClient.flat()
+          setNodes(loaded)
         }
       } catch (error) {
         console.error('[nodesPage] Failed to load nodes:', error)
@@ -632,6 +658,33 @@ export default function NodesPage() {
       mounted = false
     }
   }, [rooms, clientIdsToLoad])
+
+  // After nodes are loaded, fetch latest statuses and merge into nodes
+  useEffect(() => {
+    let mounted = true
+    async function mergeStatuses() {
+      if (nodes.length === 0) return
+      try {
+        const statuses = await getAllNodesStatusFromBackend()
+        const map = Object.fromEntries(statuses.map(s => [s.nodeId, s]))
+        if (!mounted) return
+        setNodes(prev => prev.map(n => {
+          const s = map[n.id]
+          if (!s || s.lastHeartbeat == null) {
+            return { ...n, status: 'never_connected', lastSeen: '' }
+          }
+          const isStale = typeof s.secondsSinceLastHeartbeat === 'number' && s.secondsSinceLastHeartbeat > 120
+          const status = s.online && !isStale ? 'online' : 'offline'
+          const lastSeen = normalizeIsoTimestamp(s.lastHeartbeat)
+          return { ...n, status, lastSeen }
+        }))
+      } catch (err) {
+        console.error('[nodesPage] failed to fetch node statuses', err)
+      }
+    }
+    mergeStatuses()
+    return () => { mounted = false }
+  }, [nodes.length])
 
   const selectedRoomId = createRoomId !== 'all' && createRoomOptions.some((room) => room.id === createRoomId)
     ? createRoomId
@@ -814,6 +867,7 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
   }
 
   const online = allNodes.filter((n) => n.status === 'online').length
+  const neverConnected = allNodes.filter((n) => n.status === 'never_connected').length
   const offline = allNodes.filter((n) => n.status === 'offline').length
 
   if (authLoading || roomsLoading) {
@@ -863,6 +917,15 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
           onClose={() => setSelectedNode(null)}
           onUpdate={requestNodeUpdate}
           onDelete={requestNodeDelete}
+          onVerifyStatus={(node, result) => {
+            const updatedNode: ClimaTechNode = {
+              ...node,
+              status: result.deviceStatus === 'online' ? 'online' : 'offline',
+              lastSeen: result.timestamp ? normalizeIsoTimestamp(result.timestamp) : node.lastSeen,
+            }
+            setNodes((prev) => prev.map((n) => (n.id === node.id ? updatedNode : n)))
+            setSelectedNode(updatedNode)
+          }}
           isUpdating={isUpdatingNode}
           isDeleting={isDeletingNode}
           actionError={actionError}
@@ -905,11 +968,12 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           {[
             { label: 'Total de nodes', value: allNodes.length, color: '#0f2744' },
-            { label: 'Online',   value: online,  color: '#10c98f' },
-            { label: 'Offline',  value: offline, color: '#94a3b8' },
+            { label: 'Online',   value: online,          color: '#10c98f' },
+            { label: 'Offline',  value: offline,         color: '#94a3b8' },
+            { label: 'Nunca conectado', value: neverConnected, color: '#64748b' },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid #e8edf5' }}>
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">{label}</p>
@@ -981,7 +1045,7 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
           )}
           
           <div className="flex flex-wrap gap-1.5">
-            {(['all', 'online', 'offline'] as const).map((s) => (
+            {(['all', 'online', 'offline', 'never_connected'] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
@@ -990,7 +1054,7 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
                   ? { background: 'linear-gradient(135deg, #1e5fa8, #2d7dd2)', color: 'white' }
                   : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}
               >
-                {s === 'all' ? 'Todos' : s === 'online' ? 'Online' : 'Offline'}
+                {s === 'all' ? 'Todos' : s === 'online' ? 'Online' : s === 'offline' ? 'Offline' : 'Nunca conectado'}
               </button>
             ))}
           </div>

@@ -753,6 +753,88 @@ export async function getNodesByClientFromBackend(clientId: string): Promise<Nod
   }
 }
 
+export interface NodeStatusResponse {
+  nodeId: string;
+  lastHeartbeat: string | null;
+  secondsSinceLastHeartbeat: number | null;
+  online: boolean;
+  mqtt: boolean;
+}
+
+export interface NodeVerifyResponse {
+  success: boolean;
+  nodeId: string;
+  message: string;
+  deviceStatus: 'online' | 'offline';
+  timestamp?: string;
+  version?: string;
+  uptime?: number;
+  resetReason?: string;
+}
+
+export async function verifyNodeStatusInBackend(nodeId: string, idempotencyKey?: string): Promise<NodeVerifyResponse> {
+  const url = `${API_BASE_URL}/nodes/${encodeURIComponent(nodeId)}/verify-status`
+  const headers = buildHeaders()
+  if (idempotencyKey) {
+    headers['Idempotency-Key'] = idempotencyKey
+  }
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers,
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    const message = await readApiError(response, `Falha ao verificar status do node (${response.status})`)
+    throw new Error(message)
+  }
+
+  const result: ApiResponse<NodeVerifyResponse> = await response.json()
+  return result.data
+}
+
+export async function getAllNodesStatusFromBackend(): Promise<NodeStatusResponse[]> {
+  try {
+    const url = `${API_BASE_URL}/nodes/status`
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+    if (!response.ok) {
+      const message = await readApiError(response, `Failed to load node statuses (${response.status})`)
+      throw new Error(message)
+    }
+    const result: ApiResponse<NodeStatusResponse[]> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('[apiService] Error in getAllNodesStatusFromBackend:', error)
+    throw error
+  }
+}
+
+export async function getNodeStatusFromBackend(nodeId: string): Promise<NodeStatusResponse | null> {
+  try {
+    const url = `${API_BASE_URL}/nodes/${encodeURIComponent(nodeId)}/status`
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+    if (!response.ok) {
+      if (response.status === 404) return null
+      const message = await readApiError(response, `Failed to load node status (${response.status})`)
+      throw new Error(message)
+    }
+    const result: ApiResponse<NodeStatusResponse> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('[apiService] Error in getNodeStatusFromBackend:', error)
+    return null
+  }
+}
+
 export async function createCtncNodeInBackend(salaId: string, data: NodeCreateRequest): Promise<NodeResponse> {
   try {
     const url = `${API_BASE_URL}/salas/${salaId}/nodes`

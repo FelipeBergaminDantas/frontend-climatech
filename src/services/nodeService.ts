@@ -4,16 +4,27 @@ import {
   getNodesByClientFromBackend,
   updateNodeInBackend,
   deleteNodeInBackend,
+  verifyNodeStatusInBackend,
 } from '@/services/apiService'
 import { getAcs } from '@/services/acService'
 
 let nodes: ClimaTechNode[] = []
 let acNameCache: Map<string, string> = new Map()
 
+function normalizeIsoTimestamp(value: string | undefined | null): string {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  const normalized = raw.replace(' ', 'T')
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(normalized)) {
+    return `${normalized}Z`
+  }
+  return normalized
+}
+
 function mapBackendNode(node: any, roomName: string, nomeAc?: string): ClimaTechNode {
   const type = node.node_type === 'CTN-R' ? 'CTNR' : 'CTNC'
   const status = (node.ultimo_status || '').toLowerCase().includes('online') ? 'online' : 'offline'
-  const lastSeen = node.dth_ultimo_status_at ? new Date(node.dth_ultimo_status_at).toISOString() : new Date().toISOString()
+  const lastSeen = normalizeIsoTimestamp(node.dth_ultimo_status_at) || new Date().toISOString()
   const acIndex = type === 'CTNC'
     ? (() => {
         const match = String(node.node_id || '').match(/-(\d+)$/)
@@ -106,7 +117,7 @@ export function addOrUpdateNodesFromSala(salaDetail: any): void {
   const mapped = newNodes.map((node: any, idx: number): ClimaTechNode => {
     const type = node.node_type === 'CTN-R' ? 'CTNR' : 'CTNC'
     const status = (node.ultimo_status || '').toLowerCase().includes('online') ? 'online' : 'offline'
-    const lastSeen = node.dth_ultimo_status_at ? new Date(node.dth_ultimo_status_at).toISOString() : new Date().toISOString()
+    const lastSeen = normalizeIsoTimestamp(node.dth_ultimo_status_at) || new Date().toISOString()
     const acIndex = type === 'CTNC'
       ? (() => {
           const m = (node.node_id || '').match(/-(\d+)$/)
@@ -184,6 +195,18 @@ export async function updateNode(nodeId: string, roomName: string, data: { node_
     return mapped
   } catch (error) {
     console.error('[nodeService] Error in updateNode:', error)
+    throw error
+  }
+}
+
+export async function verifyNodeStatus(nodeId: string) {
+  try {
+    const idempotencyKey = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    return await verifyNodeStatusInBackend(nodeId, idempotencyKey)
+  } catch (error) {
+    console.error('[nodeService] Error in verifyNodeStatus:', error)
     throw error
   }
 }
