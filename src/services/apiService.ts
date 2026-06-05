@@ -771,6 +771,8 @@ export interface NodeVerifyResponse {
   nodeId: string;
   message: string;
   deviceStatus: 'online' | 'offline';
+  lastHeartbeat?: string | null;
+  secondsSinceLastHeartbeat?: number | null;
   timestamp?: string;
   version?: string;
   uptime?: number;
@@ -984,10 +986,12 @@ export async function getLastTemperaturesByNodes(nodeIds: string[]): Promise<Las
 export interface TemperatureHistoryPoint {
   timestamp: string
   temperatura: number
+  measurementTimestamp?: string | null
 }
 
 export interface TemperatureHistoryResponse {
   data: TemperatureHistoryPoint[]
+  referenceIntervals: TemperatureHistoryPoint[]
   count: number
   date: string
 }
@@ -995,7 +999,7 @@ export interface TemperatureHistoryResponse {
 /**
  * Get temperature history for a sala with 30-minute granularity
  */
-export async function getTemperatureHistory(salaId: string, date?: string): Promise<TemperatureHistoryPoint[]> {
+export async function getTemperatureHistory(salaId: string, date?: string): Promise<TemperatureHistoryResponse> {
   try {
     let url = `${API_BASE_URL}/telemetry/salas/${encodeURIComponent(salaId)}/temperatura/historico`
     
@@ -1010,7 +1014,7 @@ export async function getTemperatureHistory(salaId: string, date?: string): Prom
     })
 
     if (response.status === 404) {
-      return []
+      return { data: [], referenceIntervals: [], count: 0, date: date ?? '' }
     }
 
     if (!response.ok) {
@@ -1018,10 +1022,15 @@ export async function getTemperatureHistory(salaId: string, date?: string): Prom
       throw new Error(error?.message || 'Failed to fetch temperature history')
     }
 
-    const result: ApiResponse<TemperatureHistoryResponse> = await response.json()
-    return result.data?.data || []
+    const result: TemperatureHistoryResponse = await response.json()
+    return {
+      data: result.data || [],
+      referenceIntervals: result.referenceIntervals || [],
+      count: result.count || 0,
+      date: result.date || date || '',
+    }
   } catch (error) {
     console.error('Error fetching temperature history:', error)
-    return []
+    return { data: [], referenceIntervals: [], count: 0, date: date ?? '' }
   }
 }

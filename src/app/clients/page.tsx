@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useRooms } from '@/contexts/RoomsContext'
 import { getAllClients, getClientName } from '@/services/clientService'
-import { getNodesByClientFromBackend, getAllNodesStatusFromBackend, type NodeResponse } from '@/services/apiService'
+import { getNodesByClientFromBackend, getAllNodesStatusFromBackend, type NodeResponse, type NodeStatusResponse } from '@/services/apiService'
+import { useTemperatureTelemetryBatch } from '@/hooks/useTemperatureTelemetry'
+import { getIndicatorStatus } from '@/utils/validators'
 import { useRouter } from 'next/navigation'
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -79,7 +81,7 @@ export default function OverviewPage() {
         try {
           const statuses = await getAllNodesStatusFromBackend()
           if (mounted) {
-            const map: Record<string, any> = {}
+            const map: Record<string, NodeStatusResponse> = {}
             statuses.forEach(s => { map[s.nodeId] = s })
             setNodeStatuses(map)
           }
@@ -100,6 +102,16 @@ export default function OverviewPage() {
     }
   }, [user?.role, clients])
 
+  const activeClients = clients
+  const filteredRooms = selectedClientId === 'all'
+    ? rooms
+    : rooms.filter(r => r.clientId === selectedClientId)
+  const ctnrNodeIds = filteredRooms.map((room) => room.deviceId).filter(Boolean)
+  const telemetryNodeIds = !authLoading && user?.role === 'admin_master' && !isLoadingClients
+    ? ctnrNodeIds
+    : []
+  const { temperatures: temperaturesByNode } = useTemperatureTelemetryBatch(telemetryNodeIds)
+
   // Tela de carregamento enquanto verifica clientes ativos
   if (authLoading || !user || user.role !== 'admin_master' || isLoadingClients) {
     return (
@@ -112,13 +124,6 @@ export default function OverviewPage() {
 
   // Estatísticas gerais
   const nodes = Object.values(clientNodes).flat()
-  const activeClients = clients // Já filtrados como ativos
-  
-  // Filtrar dados por cliente selecionado
-  const filteredRooms = selectedClientId === 'all' 
-    ? rooms 
-    : rooms.filter(r => r.clientId === selectedClientId)
-  
   const filteredNodes = selectedClientId === 'all'
     ? nodes
     : clientNodes[selectedClientId] ?? []
@@ -138,32 +143,25 @@ export default function OverviewPage() {
     if (!s || s.lastHeartbeat === null) return false
     return s.online && (s.secondsSinceLastHeartbeat == null || s.secondsSinceLastHeartbeat <= 120)
   }).length
-  const nodesNeverConnected = filteredNodes.filter(n => {
-    const s = nodeStatuses[n.node_id]
-    return !s || s.lastHeartbeat === null
-  }).length
-  const nodesOffline = filteredNodes.length - nodesOnline - nodesNeverConnected
+  const nodesOffline = filteredNodes.length - nodesOnline
 
   // Temperaturas por estado (crítico, atenção, correto)
   const roomsCritical = filteredRooms.filter(r => {
-    const state = deviceStates[r.id]
-    if (!state) return false
-    const diff = Math.abs(state.currentTemp - state.targetTemp)
-    return diff > 3 // Diferença maior que 3°C = crítico
+    const temp = temperaturesByNode[r.deviceId]?.temperatura ?? deviceStates[r.id]?.currentTemp
+    if (temp === undefined || temp === null) return false
+    return getIndicatorStatus(temp, r.idealTempMin, r.idealTempMax) === 'critical'
   }).length
 
   const roomsWarning = filteredRooms.filter(r => {
-    const state = deviceStates[r.id]
-    if (!state) return false
-    const diff = Math.abs(state.currentTemp - state.targetTemp)
-    return diff > 1.5 && diff <= 3 // Entre 1.5°C e 3°C = atenção
+    const temp = temperaturesByNode[r.deviceId]?.temperatura ?? deviceStates[r.id]?.currentTemp
+    if (temp === undefined || temp === null) return false
+    return getIndicatorStatus(temp, r.idealTempMin, r.idealTempMax) === 'warning'
   }).length
 
   const roomsCorrect = filteredRooms.filter(r => {
-    const state = deviceStates[r.id]
-    if (!state) return false
-    const diff = Math.abs(state.currentTemp - state.targetTemp)
-    return diff <= 1.5 // Até 1.5°C = correto
+    const temp = temperaturesByNode[r.deviceId]?.temperatura ?? deviceStates[r.id]?.currentTemp
+    if (temp === undefined || temp === null) return false
+    return getIndicatorStatus(temp, r.idealTempMin, r.idealTempMax) === 'ok'
   }).length
 
   // Consumo de energia - SOMA do consumo de todos os clientes/salas filtrados
@@ -295,21 +293,6 @@ export default function OverviewPage() {
                 </div>
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium" style={{ color: '#64748b' }}>Nunca conectado</span>
-                  <span className="text-sm font-bold" style={{ color: '#64748b' }}>{nodesNeverConnected}</span>
-                </div>
-                <div className="h-8 rounded-lg overflow-hidden" style={{ background: '#f1f5f9' }}>
-                  <div 
-                    className="h-full transition-all duration-500"
-                    style={{ 
-                      width: `${totalDevices > 0 ? (nodesNeverConnected / totalDevices) * 100 : 0}%`,
-                      background: 'linear-gradient(90deg, #94a3b8, #64748b)'
-                    }}
-                  />
-                </div>
-              </div>
             </div>
           </div>
 

@@ -27,7 +27,6 @@ function normalizeIsoTimestamp(value: string): string {
 const STATUS_CONFIG: Record<NodeStatus, { label: string; color: string; bg: string; dot: string }> = {
   online:  { label: 'Online',          color: '#10c98f', bg: 'rgba(16,201,143,0.1)',  dot: '#10c98f' },
   offline: { label: 'Offline',         color: '#94a3b8', bg: 'rgba(148,163,184,0.1)', dot: '#94a3b8' },
-  never_connected: { label: 'Nunca conectado', color: '#64748b', bg: 'rgba(148,163,184,0.04)', dot: '#64748b' },
 }
 
 // IR commands available for CTN-C learning mode
@@ -663,12 +662,15 @@ export default function NodesPage() {
   useEffect(() => {
     let mounted = true
     function resolveLatestSeen(n: ClimaTechNode, s: { lastHeartbeat: string | null; secondsSinceLastHeartbeat: number | null }) {
-      if (s.lastHeartbeat) {
-        const normalized = normalizeIsoTimestamp(s.lastHeartbeat)
-        if (normalized) return normalized
+      if (s.lastHeartbeat === null) {
+        return ''
       }
       if (typeof s.secondsSinceLastHeartbeat === 'number') {
         return new Date(Date.now() - s.secondsSinceLastHeartbeat * 1000).toISOString()
+      }
+      if (s.lastHeartbeat) {
+        const normalized = normalizeIsoTimestamp(s.lastHeartbeat)
+        if (normalized) return normalized
       }
       return n.lastSeen || ''
     }
@@ -682,7 +684,7 @@ export default function NodesPage() {
         setNodes(prev => prev.map(n => {
           const s = map[n.id]
           if (!s) {
-            return { ...n, status: 'never_connected', lastSeen: '' }
+            return { ...n, status: 'offline', lastSeen: '' }
           }
           const isStale = typeof s.secondsSinceLastHeartbeat === 'number' && s.secondsSinceLastHeartbeat > 120
           const status = s.online && !isStale ? 'online' : 'offline'
@@ -878,7 +880,6 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
   }
 
   const online = allNodes.filter((n) => n.status === 'online').length
-  const neverConnected = allNodes.filter((n) => n.status === 'never_connected').length
   const offline = allNodes.filter((n) => n.status === 'offline').length
 
   if (authLoading || roomsLoading) {
@@ -932,7 +933,15 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
             const updatedNode: ClimaTechNode = {
               ...node,
               status: result.deviceStatus === 'online' ? 'online' : 'offline',
-              lastSeen: result.timestamp ? normalizeIsoTimestamp(result.timestamp) : node.lastSeen,
+              lastSeen: result.lastHeartbeat !== undefined
+                ? (typeof result.secondsSinceLastHeartbeat === 'number'
+                  ? new Date(Date.now() - result.secondsSinceLastHeartbeat * 1000).toISOString()
+                  : result.lastHeartbeat
+                    ? normalizeIsoTimestamp(result.lastHeartbeat)
+                    : '')
+                : result.timestamp
+                  ? normalizeIsoTimestamp(result.timestamp)
+                  : node.lastSeen,
             }
             setNodes((prev) => prev.map((n) => (n.id === node.id ? updatedNode : n)))
             setSelectedNode(updatedNode)
@@ -979,12 +988,11 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
             { label: 'Total de nodes', value: allNodes.length, color: '#0f2744' },
             { label: 'Online',   value: online,          color: '#10c98f' },
             { label: 'Offline',  value: offline,         color: '#94a3b8' },
-            { label: 'Nunca conectado', value: neverConnected, color: '#64748b' },
           ].map(({ label, value, color }) => (
             <div key={label} className="rounded-2xl p-5" style={{ background: 'white', border: '1px solid #e8edf5' }}>
               <p className="text-xs font-medium text-slate-400 uppercase tracking-wide mb-1">{label}</p>
@@ -1056,7 +1064,7 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
           )}
           
           <div className="flex flex-wrap gap-1.5">
-            {(['all', 'online', 'offline', 'never_connected'] as const).map((s) => (
+            {(['all', 'online', 'offline'] as const).map((s) => (
               <button
                 key={s}
                 onClick={() => setFilterStatus(s)}
@@ -1065,7 +1073,7 @@ const roomId = selectedRoomId !== 'all' ? selectedRoomId : createRoomOptions[0]?
                   ? { background: 'linear-gradient(135deg, #1e5fa8, #2d7dd2)', color: 'white' }
                   : { background: 'white', color: '#64748b', border: '1px solid #e2e8f0' }}
               >
-                {s === 'all' ? 'Todos' : s === 'online' ? 'Online' : s === 'offline' ? 'Offline' : 'Nunca conectado'}
+                {s === 'all' ? 'Todos' : s === 'online' ? 'Online' : 'Offline'}
               </button>
             ))}
           </div>

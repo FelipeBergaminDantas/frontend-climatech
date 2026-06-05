@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { TemperatureChart } from './TemperatureChart'
-import { getTemperatureHistory, getLiveReadings, getAvailableDates } from '@/services/deviceService'
+import { getAvailableDates } from '@/services/deviceService'
 import { getClientName } from '@/services/clientService'
 import { useTemperatureHistory } from '@/hooks/useTemperatureTelemetry'
-import type { TemperatureReading, Room } from '@/types'
+import type { Room } from '@/types'
 
 interface ChartSectionProps {
   roomId: string
@@ -18,27 +18,24 @@ interface ChartSectionProps {
   onRoomChange?: (roomId: string) => void
 }
 
+function getLocalDateInputValue(date = new Date()): string {
+  const offset = date.getTimezoneOffset()
+  return new Date(date.getTime() - offset * 60000).toISOString().slice(0, 10)
+}
+
 export function ChartSection({ 
   roomId, 
-  roomName, 
   idealMin, 
   idealMax,
   showClientFilter = false,
   allRooms = [],
   onRoomChange
 }: ChartSectionProps) {
-  const [selectedDate, setSelectedDate] = useState<string>(() => {
-    const now = new Date()
-    const offset = now.getTimezoneOffset()
-    return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10)
-  })
-  type TemperatureChartPoint = { timestamp: string; temp?: number; temperatura?: number }
-  const [readings, setReadings] = useState<TemperatureChartPoint[]>([])
-  const [availableDates, setAvailableDates] = useState<string[]>([])
-  const [resolvedDate, setResolvedDate] = useState<string>('')
+  const [selectedDate, setSelectedDate] = useState<string>(() => getLocalDateInputValue())
+  type TemperatureChartPoint = { timestamp: string; temp?: number; temperatura?: number; measurementTimestamp?: string | null }
   
   // Fetch temperature history using the hook
-  const { history, isLoading: historyLoading, error: historyError } = useTemperatureHistory(roomId, selectedDate)
+  const { history, referenceIntervals, resolvedDate } = useTemperatureHistory(roomId, selectedDate)
   
   // Obter lista única de clientes
   const clientIds = Array.from(new Set(allRooms.map(r => r.clientId)))
@@ -59,33 +56,25 @@ export function ChartSection({
     }
   }, [selectedClientId, filteredRooms, roomId, showClientFilter, onRoomChange])
 
-  // Load available dates once
-  useEffect(() => {
-    const dates = getAvailableDates(roomId)
-    setAvailableDates(dates)
-  }, [roomId])
+  const availableDates = useMemo(() => getAvailableDates(roomId), [roomId])
 
-  // Update readings when hook data changes
-  useEffect(() => {
-    if (history && history.length > 0) {
-      const normalizedReadings = history.map((point) => ({
-        timestamp: point.timestamp,
-        temp: typeof (point as any).temp === 'number'
-          ? (point as any).temp
-          : typeof point.temperatura === 'number'
-            ? point.temperatura
-            : Number((point as any).temp ?? point.temperatura),
-        temperatura: point.temperatura,
-      }))
-      setReadings(normalizedReadings)
-      // Detect if we redirected to a different date
-      const actual = history[0].timestamp.slice(0, 10)
-      setResolvedDate(actual !== selectedDate ? actual : '')
-    } else {
-      setReadings([])
-      setResolvedDate('')
-    }
-  }, [history, selectedDate])
+  const readings: TemperatureChartPoint[] = useMemo(() => history.map((point) => ({
+    timestamp: point.timestamp,
+    temp: typeof point.temperatura === 'number' ? point.temperatura : Number(point.temperatura),
+    temperatura: point.temperatura,
+    measurementTimestamp: point.measurementTimestamp,
+  })), [history])
+
+  const referenceReadings: TemperatureChartPoint[] = useMemo(() => referenceIntervals.map((point) => ({
+    timestamp: point.timestamp,
+    temp: typeof point.temperatura === 'number' ? point.temperatura : Number(point.temperatura),
+    temperatura: point.temperatura,
+    measurementTimestamp: point.measurementTimestamp,
+  })), [referenceIntervals])
+
+  const fallbackDate = resolvedDate && resolvedDate !== selectedDate
+    ? resolvedDate
+    : ''
 
   return (
     <div className="space-y-3">
@@ -139,7 +128,7 @@ export function ChartSection({
           <input
             type="date"
             value={selectedDate}
-            max={new Date().toISOString().slice(0, 10)}
+            max={getLocalDateInputValue()}
             onChange={e => setSelectedDate(e.target.value)}
             className="px-3 py-1.5 rounded-xl text-xs outline-none cursor-pointer w-full sm:w-auto"
             style={{ background: '#f0f4f8', border: '1px solid #e2e8f0', color: '#0f2744' }}
@@ -149,7 +138,7 @@ export function ChartSection({
       </div>
 
       {/* Nearest date notice */}
-      {resolvedDate && (
+      {fallbackDate && (
         <div className="rounded-xl px-4 py-2 text-xs" style={{ background: 'rgba(245,158,11,0.08)', color: '#b45309', border: '1px solid rgba(245,158,11,0.2)' }}>
           Sem dados para a data selecionada. Exibindo dados de <span className="font-semibold">{resolvedDate}</span> (data mais próxima disponível).
         </div>
@@ -164,6 +153,7 @@ export function ChartSection({
 
       <TemperatureChart
         readings={readings}
+        referenceReadings={referenceReadings}
         idealMin={idealMin}
         idealMax={idealMax}
         mode="history"

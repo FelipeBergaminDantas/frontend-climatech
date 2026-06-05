@@ -143,16 +143,22 @@ export function useTemperatureHistory(
   date?: string
 ): {
   history: TemperatureHistoryPoint[];
+  referenceIntervals: TemperatureHistoryPoint[];
+  resolvedDate: string;
   isLoading: boolean;
   error: string | null;
 } {
   const [history, setHistory] = useState<TemperatureHistoryPoint[]>([])
+  const [referenceIntervals, setReferenceIntervals] = useState<TemperatureHistoryPoint[]>([])
+  const [resolvedDate, setResolvedDate] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!salaId) {
       setHistory([])
+      setReferenceIntervals([])
+      setResolvedDate('')
       setIsLoading(false)
       setError(null)
       return
@@ -167,16 +173,21 @@ export function useTemperatureHistory(
         setError(null)
         console.log('[useTemperatureHistory] Fetching history for sala:', id, 'date:', date)
 
-        const data = await getTemperatureHistory(id, date)
+        const result = await getTemperatureHistory(id, date)
+        const data = result.data
         
         if (isMounted) {
           if (data && data.length > 0) {
             console.log('[useTemperatureHistory] Got', data.length, 'history points')
             setHistory(data)
+            setReferenceIntervals(result.referenceIntervals)
+            setResolvedDate(result.date)
             setError(null)
           } else {
             console.log('[useTemperatureHistory] No history data found')
             setHistory([])
+            setReferenceIntervals([])
+            setResolvedDate('')
             setError('Sem dados de temperatura para o período')
           }
         }
@@ -186,6 +197,8 @@ export function useTemperatureHistory(
           console.error('[useTemperatureHistory] Error:', message)
           setError(message)
           setHistory([])
+          setReferenceIntervals([])
+          setResolvedDate('')
         }
       } finally {
         if (isMounted) {
@@ -203,6 +216,8 @@ export function useTemperatureHistory(
 
   return {
     history,
+    referenceIntervals,
+    resolvedDate,
     isLoading,
     error,
   }

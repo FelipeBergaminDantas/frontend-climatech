@@ -20,7 +20,21 @@ import {
   addLiveModeListener,
 } from '@/services/liveModeService'
 import { useTemperatureTelemetryBatch } from '@/hooks/useTemperatureTelemetry'
-import type { TemperatureReading, AutomationState } from '@/types'
+import type { AutomationState, Room } from '@/types'
+
+type RoomWithBackendAliases = Room & {
+  ctnr_node_id?: string
+  ctrnNodeId?: string
+  temp_alvo?: number | null
+}
+
+function getRoomReferenceNodeId(room?: RoomWithBackendAliases): string {
+  return room?.deviceId || room?.ctnr_node_id || room?.ctrnNodeId || ''
+}
+
+function getRoomTargetTemp(room?: RoomWithBackendAliases): number | null | undefined {
+  return room?.targetTemp ?? room?.temp_alvo
+}
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
@@ -174,13 +188,13 @@ export default function DashboardPage() {
   // Fetch CTNR node IDs from filtered rooms for telemetry
   const nodeIds = useMemo(() => {
     const ids = filteredRooms
-      .map(r => (r as any)?.deviceId || (r as any)?.ctnr_node_id || (r as any)?.ctrnNodeId)
+      .map(r => getRoomReferenceNodeId(r as RoomWithBackendAliases))
       .filter(Boolean);
     return ids;
   }, [filteredRooms]);
 
   // Fetch last temperature readings for all rooms
-  const { temperatures: temperaturesByNode, isLoading: isTelemetryLoading } = useTemperatureTelemetryBatch(nodeIds);
+  const { temperatures: temperaturesByNode } = useTemperatureTelemetryBatch(nodeIds);
   
   // Lista de clientes únicos para o filtro (apenas clientes ativos)
   const clientIds = useMemo(() => {
@@ -261,7 +275,7 @@ export default function DashboardPage() {
   const selectedState = selectedRoomId ? deviceStates[selectedRoomId] : undefined
 
   const selectedRoomNodeId = selectedRoom
-    ? ((selectedRoom as any)?.deviceId || (selectedRoom as any)?.ctnr_node_id || (selectedRoom as any)?.ctrnNodeId)
+    ? getRoomReferenceNodeId(selectedRoom as RoomWithBackendAliases)
     : undefined
   const selectedRoomTelemetry = selectedRoomNodeId ? temperaturesByNode[selectedRoomNodeId] : undefined
   const selectedRoomCurrentTemp = selectedRoomTelemetry?.temperatura ?? selectedState?.currentTemp
@@ -295,16 +309,23 @@ export default function DashboardPage() {
   if (!isAuthenticated && !authLoading) return null
 
   // Summary stats
-  const onlineCount = filteredRooms.filter(r => deviceStates[r.id]?.isOn).length
-  const avgTemp = filteredRooms.length > 0
-    ? (filteredRooms.map(r => deviceStates[r.id]).filter(Boolean).reduce((sum, s) => sum + s.currentTemp, 0) / filteredRooms.length).toFixed(1)
+  const measuredTemperatures = filteredRooms
+    .map((room) => {
+      const nodeId = getRoomReferenceNodeId(room as RoomWithBackendAliases)
+      const telemetryTemp = nodeId ? temperaturesByNode[nodeId]?.temperatura : undefined
+      return telemetryTemp ?? deviceStates[room.id]?.currentTemp
+    })
+    .filter((temp): temp is number => typeof temp === 'number' && Number.isFinite(temp))
+
+  const avgTemp = measuredTemperatures.length > 0
+    ? (measuredTemperatures.reduce((sum, temp) => sum + temp, 0) / measuredTemperatures.length).toFixed(1)
     : '—'
   const totalRooms = filteredRooms.length
 
   const status = selectedRoom && selectedRoomCurrentTemp !== undefined && selectedRoomCurrentTemp !== null
     ? (selectedRoom.idealTempMin !== undefined && selectedRoom.idealTempMax !== undefined
       ? getIndicatorStatus(selectedRoomCurrentTemp, selectedRoom.idealTempMin, selectedRoom.idealTempMax)
-      : getIndicatorStatus(selectedRoomCurrentTemp, selectedState?.targetTemp ?? selectedRoom.targetTemp ?? (selectedRoom as any)?.temp_alvo ?? 0))
+      : getIndicatorStatus(selectedRoomCurrentTemp, selectedState?.targetTemp ?? getRoomTargetTemp(selectedRoom as RoomWithBackendAliases) ?? 0))
     : 'ok'
 
   const statusColor = { ok: '#10c98f', warning: '#f59e0b', critical: '#ef4444' }[status]
@@ -541,13 +562,14 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredRooms.map(room => {
                   const state = deviceStates[room.id]
-                  const ctrnNodeId = (room as any)?.deviceId || (room as any)?.ctnr_node_id || (room as any)?.ctrnNodeId;
+                  const typedRoom = room as RoomWithBackendAliases
+                  const ctrnNodeId = getRoomReferenceNodeId(typedRoom);
                   const telemetryData = ctrnNodeId ? temperaturesByNode[ctrnNodeId] : null;
                   const displayTemp = telemetryData?.temperatura ?? state?.currentTemp
                   const s = displayTemp !== undefined && displayTemp !== null
-                    ? ((room as any)?.idealTempMin !== undefined && (room as any)?.idealTempMax !== undefined
-                      ? getIndicatorStatus(displayTemp, (room as any).idealTempMin, (room as any).idealTempMax)
-                      : getIndicatorStatus(displayTemp, state?.targetTemp ?? (room as any)?.targetTemp ?? (room as any)?.temp_alvo ?? 0))
+                    ? (typedRoom.idealTempMin !== undefined && typedRoom.idealTempMax !== undefined
+                      ? getIndicatorStatus(displayTemp, typedRoom.idealTempMin, typedRoom.idealTempMax)
+                      : getIndicatorStatus(displayTemp, state?.targetTemp ?? getRoomTargetTemp(typedRoom) ?? 0))
                     : 'ok'
                   const sc = { ok: '#10c98f', warning: '#f59e0b', critical: '#ef4444' }[s]
 
