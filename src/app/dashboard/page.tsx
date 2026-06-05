@@ -19,7 +19,7 @@ import {
   canControlLiveMode,
   addLiveModeListener,
 } from '@/services/liveModeService'
-import type { TemperatureReading } from '@/types'
+import type { TemperatureReading, AutomationState } from '@/types'
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
