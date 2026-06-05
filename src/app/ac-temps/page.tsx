@@ -242,8 +242,8 @@ export default function AcTempsPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Criado em</p>
-                      <p className="mt-1 text-sm text-slate-700">{ac.createdAt ? new Date(ac.createdAt).toLocaleString('pt-BR') : '—'}</p>
+                      <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">Atualizado em</p>
+                      <p className="mt-1 text-sm text-slate-700">{ac.updatedAt ? new Date(ac.updatedAt).toLocaleString('pt-BR') : '—'}</p>
                     </div>
                   </div>
                 </div>
@@ -255,11 +255,6 @@ export default function AcTempsPage() {
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
                     Tipo node: {ac.nodeType ?? 'CTN-C'}
                   </span>
-                  {ac.nodeLastSeen && (
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                      Último sinal: {new Date(ac.nodeLastSeen).toLocaleString('pt-BR')}
-                    </span>
-                  )}
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-3">

@@ -58,7 +58,7 @@ export default function DashboardPage() {
   const router = useRouter()
   const { user, isAuthenticated, isLoading: authLoading } = useAuth()
   const { rooms, deviceStates, isLoading: roomsLoading, syncDeviceState } = useRooms()
-  const { rules, activeCount: autoActive, totalCount: autoTotal, loadRules, loadStates } = useAutomations()
+  const { rules, states, activeCount: autoActive, totalCount: autoTotal, loadRules, loadStates } = useAutomations()
 
   const [selectedRoomId, setSelectedRoomId] = useState<string>('')
   
@@ -248,8 +248,30 @@ export default function DashboardPage() {
   const selectedRoom = useMemo(() => filteredRooms.find(r => r.id === selectedRoomId), [filteredRooms, selectedRoomId])
   const selectedState = selectedRoomId ? deviceStates[selectedRoomId] : undefined
 
+  const isAutomationRunning = (state?: AutomationState) => {
+    if (!state) return false
+    const command = state.comandoEnviado?.toString().trim().toLowerCase()
+    const status = state.status?.toString().trim().toLowerCase()
+    if (state.flEmExecucao) return true
+    if (command === 'power_on') return true
+    if (status?.includes('em execução') || status?.includes('execut')) return true
+    return false
+  }
+
+  const roomsWithRunningAutomation = useMemo(() => {
+    return new Set(rules.filter(rule => isAutomationRunning(states[rule.id])).map(rule => rule.roomId))
+  }, [rules, states])
+
+  const selectedRoomRunningAutomations = useMemo(() => {
+    if (!selectedRoom) return 0
+    return rules.filter(rule => rule.roomId === selectedRoom.id && isAutomationRunning(states[rule.id])).length
+  }, [rules, states, selectedRoom])
+
+  const selectedRoomAutomationOn = selectedRoom ? roomsWithRunningAutomation.has(selectedRoom.id) : false
+  const selectedRoomIsOn = selectedRoomAutomationOn || selectedState?.isOn
+
   const totalAcs = filteredRooms.reduce((sum, room) => sum + room.acCount, 0)
-  const activeAcs = filteredRooms.reduce((sum, room) => sum + (deviceStates[room.id]?.isOn ? room.acCount : 0), 0)
+  const activeAcs = filteredRooms.reduce((sum, room) => sum + (roomsWithRunningAutomation.has(room.id) ? room.acCount : 0), 0)
 
   const isLoading = roomsLoading || (isAllClientsView && isLoadingClients)
   if (!isAuthenticated && !authLoading) return null
@@ -372,7 +394,7 @@ export default function DashboardPage() {
             {/* Summary stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <StatCard label="Total de salas" value={String(totalRooms)} sub="cadastradas" />
-              <StatCard label="ACs ligados" value={String(activeAcs)} sub={`de ${totalAcs}`} color="#10c98f" />
+              <StatCard label="ACs ligados" value={String(activeAcs)} sub={`de ${totalAcs} (por automações)`} color="#10c98f" />
               <StatCard label="Temp. média" value={`${avgTemp}°C`} sub="todas as salas" color="#1e5fa8" />
               <StatCard label="Automações" value={`${autoActive}/${autoTotal}`} sub="ativas" color="#0ea5a0" />
             </div>
@@ -424,29 +446,45 @@ export default function DashboardPage() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-500">Ar-condicionado</span>
                     <span className="font-medium flex items-center gap-1.5"
-                      style={{ color: selectedState?.isOn ? '#10c98f' : '#94a3b8' }}>
-                      <span className="w-2 h-2 rounded-full" style={{ background: selectedState?.isOn ? '#10c98f' : '#94a3b8' }} />
-                      {selectedState?.isOn ? 'Ligado' : 'Desligado'}
+                      style={{ color: selectedRoomIsOn ? '#10c98f' : '#94a3b8' }}>
+                      <span className="w-2 h-2 rounded-full" style={{ background: selectedRoomIsOn ? '#10c98f' : '#94a3b8' }} />
+                      {selectedRoomIsOn ? 'Ligado' : 'Desligado'}
                     </span>
                   </div>
-                  {selectedState?.isOn && (
+                  {selectedRoomIsOn && (
                     <>
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-500">Modo</span>
-                        <span className="font-medium" style={{ color: '#0f2744' }}>{modeLabel[selectedState.mode] ?? selectedState.mode}</span>
+                        <span className="font-medium" style={{ color: '#0f2744' }}>{modeLabel[selectedState?.mode ?? 'auto'] ?? selectedState?.mode ?? 'auto'}</span>
                       </div>
                       <div className="flex items-center justify-between text-sm">
                         <span className="text-slate-500">Alvo</span>
-                        <span className="font-medium" style={{ color: '#1e5fa8' }}>{selectedState.targetTemp}°C</span>
+                        <span className="font-medium" style={{ color: '#1e5fa8' }}>
+                          {selectedRoom?.targetTemp !== undefined && selectedRoom?.targetTemp !== null
+                            ? `${selectedRoom.targetTemp}°C`
+                            : selectedState?.targetTemp !== undefined && selectedState?.targetTemp !== null
+                              ? `${selectedState.targetTemp}°C`
+                              : '—'}
+                        </span>
                       </div>
                     </>
                   )}
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-slate-500">Consumo est.</span>
                     <span className="font-medium" style={{ color: '#0f2744' }}>
-                      {selectedState?.isOn ? '1.2 kWh' : '0 kWh'}
+                      {selectedRoomIsOn ? '1.2 kWh' : '0 kWh'}
                     </span>
                   </div>
+                </div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm">
+                  {selectedRoomRunningAutomations > 0 ? (
+                    <>
+                      <p className="font-medium text-slate-900">AC estará ligado quando houver automação em execução.</p>
+                      <p className="mt-1 text-xs text-slate-500">{selectedRoomRunningAutomations} automação{selectedRoomRunningAutomations !== 1 ? 's' : ''} em execução.</p>
+                    </>
+                  ) : (
+                    <p className="text-slate-500">Nenhuma automação em execução para esta sala no momento.</p>
+                  )}
                 </div>
 
                 <button

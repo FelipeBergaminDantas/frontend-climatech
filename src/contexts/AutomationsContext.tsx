@@ -94,12 +94,13 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
 
   const loadStates = useCallback(async (roomId: string) => {
     const fetched = await automationService.fetchAutomationStates(roomId)
-    setStates(
-      fetched.reduce((acc, state) => {
+    setStates(prev => ({
+      ...prev,
+      ...fetched.reduce((acc, state) => {
         acc[state.idAutomacao] = state
         return acc
       }, {} as Record<string, AutomationState>)
-    )
+    }))
 
     setRules(prev => prev.map(rule => {
       const state = fetched.find((item) => item.idAutomacao === rule.id)
@@ -120,7 +121,11 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
         runtimeStatus: r.runtimeStatus,
       }
     }))
-    await loadStates(updated.roomId)
+    try {
+      await loadStates(updated.roomId)
+    } catch (error) {
+      console.warn('Failed to refresh automation states after toggle:', error)
+    }
     return updated
   }, [loadStates])
 
@@ -142,7 +147,11 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
   }, password?: string) => {
     const created = await automationService.createRule(data, password)
     setRules(prev => [...prev, created])
-    await loadStates(created.roomId)
+    try {
+      await loadStates(created.roomId)
+    } catch (error) {
+      console.warn('Failed to refresh automation states after create:', error)
+    }
     return created
   }, [loadStates])
 
@@ -173,7 +182,11 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
         runtimeStatus: r.runtimeStatus,
       }
     }))
-    await loadStates(updated.roomId)
+    try {
+      await loadStates(updated.roomId)
+    } catch (error) {
+      console.warn('Failed to refresh automation states after update:', error)
+    }
     return updated
   }, [loadStates])
 
@@ -182,7 +195,11 @@ export function AutomationsProvider({ children }: { children: ReactNode }) {
     await automationService.deleteRule(id, password)
     setRules(prev => prev.filter(r => r.id !== id))
     if (ruleToDelete) {
-      await loadStates(ruleToDelete.roomId)
+      try {
+        await loadStates(ruleToDelete.roomId)
+      } catch (error) {
+        console.warn('Failed to refresh automation states after delete:', error)
+      }
     }
   }, [loadStates, rules])
 
