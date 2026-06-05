@@ -662,6 +662,17 @@ export default function NodesPage() {
   // After nodes are loaded, fetch latest statuses and merge into nodes
   useEffect(() => {
     let mounted = true
+    function resolveLatestSeen(n: ClimaTechNode, s: { lastHeartbeat: string | null; secondsSinceLastHeartbeat: number | null }) {
+      if (s.lastHeartbeat) {
+        const normalized = normalizeIsoTimestamp(s.lastHeartbeat)
+        if (normalized) return normalized
+      }
+      if (typeof s.secondsSinceLastHeartbeat === 'number') {
+        return new Date(Date.now() - s.secondsSinceLastHeartbeat * 1000).toISOString()
+      }
+      return n.lastSeen || ''
+    }
+
     async function mergeStatuses() {
       if (nodes.length === 0) return
       try {
@@ -670,12 +681,12 @@ export default function NodesPage() {
         if (!mounted) return
         setNodes(prev => prev.map(n => {
           const s = map[n.id]
-          if (!s || s.lastHeartbeat == null) {
+          if (!s) {
             return { ...n, status: 'never_connected', lastSeen: '' }
           }
           const isStale = typeof s.secondsSinceLastHeartbeat === 'number' && s.secondsSinceLastHeartbeat > 120
           const status = s.online && !isStale ? 'online' : 'offline'
-          const lastSeen = normalizeIsoTimestamp(s.lastHeartbeat)
+          const lastSeen = resolveLatestSeen(n, s)
           return { ...n, status, lastSeen }
         }))
       } catch (err) {

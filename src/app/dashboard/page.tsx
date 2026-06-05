@@ -19,6 +19,7 @@ import {
   canControlLiveMode,
   addLiveModeListener,
 } from '@/services/liveModeService'
+import { useTemperatureTelemetryBatch } from '@/hooks/useTemperatureTelemetry'
 import type { TemperatureReading, AutomationState } from '@/types'
 
 function StatCard({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
@@ -170,6 +171,17 @@ export default function DashboardPage() {
     return rooms.filter(r => r.clientId === dashboardClientFilter)
   }, [rooms, isAllClientsView, dashboardClientFilter])
   
+  // Fetch CTNR node IDs from filtered rooms for telemetry
+  const nodeIds = useMemo(() => {
+    const ids = filteredRooms
+      .map(r => (r as any)?.deviceId || (r as any)?.ctnr_node_id || (r as any)?.ctrnNodeId)
+      .filter(Boolean);
+    return ids;
+  }, [filteredRooms]);
+
+  // Fetch last temperature readings for all rooms
+  const { temperatures: temperaturesByNode, isLoading: isTelemetryLoading } = useTemperatureTelemetryBatch(nodeIds);
+  
   // Lista de clientes únicos para o filtro (apenas clientes ativos)
   const clientIds = useMemo(() => {
     const uniqueClientIds = Array.from(new Set(rooms.map(r => r.clientId)))
@@ -248,6 +260,12 @@ export default function DashboardPage() {
   const selectedRoom = useMemo(() => filteredRooms.find(r => r.id === selectedRoomId), [filteredRooms, selectedRoomId])
   const selectedState = selectedRoomId ? deviceStates[selectedRoomId] : undefined
 
+  const selectedRoomNodeId = selectedRoom
+    ? ((selectedRoom as any)?.deviceId || (selectedRoom as any)?.ctnr_node_id || (selectedRoom as any)?.ctrnNodeId)
+    : undefined
+  const selectedRoomTelemetry = selectedRoomNodeId ? temperaturesByNode[selectedRoomNodeId] : undefined
+  const selectedRoomCurrentTemp = selectedRoomTelemetry?.temperatura ?? selectedState?.currentTemp
+
   const isAutomationRunning = (state?: AutomationState) => {
     if (!state) return false
     const command = state.comandoEnviado?.toString().trim().toLowerCase()
@@ -283,8 +301,10 @@ export default function DashboardPage() {
     : '—'
   const totalRooms = filteredRooms.length
 
-  const status = selectedRoom && selectedState
-    ? getIndicatorStatus(selectedState.currentTemp, selectedRoom.idealTempMin, selectedRoom.idealTempMax)
+  const status = selectedRoom && selectedRoomCurrentTemp !== undefined && selectedRoomCurrentTemp !== null
+    ? (selectedRoom.idealTempMin !== undefined && selectedRoom.idealTempMax !== undefined
+      ? getIndicatorStatus(selectedRoomCurrentTemp, selectedRoom.idealTempMin, selectedRoom.idealTempMax)
+      : getIndicatorStatus(selectedRoomCurrentTemp, selectedState?.targetTemp ?? selectedRoom.targetTemp ?? (selectedRoom as any)?.temp_alvo ?? 0))
     : 'ok'
 
   const statusColor = { ok: '#10c98f', warning: '#f59e0b', critical: '#ef4444' }[status]
@@ -430,15 +450,30 @@ export default function DashboardPage() {
 
                 {/* Big temperature */}
                 <div className="flex-1 flex flex-col items-center justify-center py-4">
-                  <p className="text-6xl font-bold" style={{ color: '#0f2744' }}>
-                    {selectedState ? `${selectedState.currentTemp}°` : '—'}
-                  </p>
-                  <p className="text-sm text-slate-400 mt-1">Celsius</p>
-                  {selectedRoom && (
-                    <p className="text-xs text-slate-400 mt-2">
-                      Ideal: {selectedRoom.idealTempMin}°C – {selectedRoom.idealTempMax}°C
-                    </p>
-                  )}
+                  {(() => {
+                    const displayTemp = selectedRoomCurrentTemp
+                    const tempDisplay = displayTemp !== undefined && displayTemp !== null ? `${displayTemp}°` : '—'
+                    const lastMeasuredAt = selectedRoomTelemetry?.dth_medicao
+
+                    return (
+                      <>
+                        <p className="text-6xl font-bold" style={{ color: '#0f2744' }}>
+                          {tempDisplay}
+                        </p>
+                        <p className="text-sm text-slate-400 mt-1">Celsius</p>
+                        {lastMeasuredAt && (
+                          <p className="text-xs text-slate-400 mt-1">
+                            {new Date(lastMeasuredAt).toLocaleString('pt-BR')}
+                          </p>
+                        )}
+                        {selectedRoom && (
+                          <p className="text-xs text-slate-400 mt-2">
+                            Ideal: {selectedRoom.idealTempMin}°C – {selectedRoom.idealTempMax}°C
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* AC status */}
@@ -506,8 +541,20 @@ export default function DashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {filteredRooms.map(room => {
                   const state = deviceStates[room.id]
-                  const s = state ? getIndicatorStatus(state.currentTemp, state.targetTemp) : 'ok'
+                  const ctrnNodeId = (room as any)?.deviceId || (room as any)?.ctnr_node_id || (room as any)?.ctrnNodeId;
+                  const telemetryData = ctrnNodeId ? temperaturesByNode[ctrnNodeId] : null;
+                  const displayTemp = telemetryData?.temperatura ?? state?.currentTemp
+                  const s = displayTemp !== undefined && displayTemp !== null
+                    ? ((room as any)?.idealTempMin !== undefined && (room as any)?.idealTempMax !== undefined
+                      ? getIndicatorStatus(displayTemp, (room as any).idealTempMin, (room as any).idealTempMax)
+                      : getIndicatorStatus(displayTemp, state?.targetTemp ?? (room as any)?.targetTemp ?? (room as any)?.temp_alvo ?? 0))
+                    : 'ok'
                   const sc = { ok: '#10c98f', warning: '#f59e0b', critical: '#ef4444' }[s]
+
+                  // Check if this room has running automations
+                  const roomHasRunningAutomation = roomsWithRunningAutomation.has(room.id)
+                  const roomAutomationCount = rules.filter(rule => rule.roomId === room.id && isAutomationRunning(states[rule.id])).length
+                  
                   return (
                     <button
                       key={room.id}
@@ -522,17 +569,34 @@ export default function DashboardPage() {
                         </div>
                         <span className="w-2.5 h-2.5 rounded-full mt-1 shrink-0" style={{ background: sc }} />
                       </div>
-                      <p className="text-3xl font-bold mb-2" style={{ color: '#0f2744' }}>
-                        {state ? `${state.currentTemp}°C` : '—'}
-                      </p>
+                      <div className="flex items-end justify-between gap-2 mb-2">
+                        <p className="text-3xl font-bold" style={{ color: '#0f2744' }}>
+                          {displayTemp !== undefined && displayTemp !== null ? `${displayTemp}°C` : '—'}
+                        </p>
+                        {telemetryData?.dth_medicao && (
+                          <p className="text-xs text-slate-400 mb-1">
+                            {new Date(telemetryData.dth_medicao).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Automation info */}
+                      {roomHasRunningAutomation && (
+                        <div className="mb-2 rounded-lg bg-blue-50 border border-blue-200 p-2">
+                          <p className="text-xs font-medium text-blue-900">
+                            {roomAutomationCount} automação{roomAutomationCount !== 1 ? 's' : ''} em execução
+                          </p>
+                        </div>
+                      )}
+                      
                       <div className="flex items-center justify-between text-xs mt-1">
                         <div className="flex items-center gap-2">
-                          <span className="flex items-center gap-1" style={{ color: state?.isOn ? '#10c98f' : '#94a3b8' }}>
-                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: state?.isOn ? '#10c98f' : '#94a3b8' }} />
-                            {state?.isOn ? 'Ligado' : 'Desligado'}
+                          <span className="flex items-center gap-1" style={{ color: state?.isOn || roomHasRunningAutomation ? '#10c98f' : '#94a3b8' }}>
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: state?.isOn || roomHasRunningAutomation ? '#10c98f' : '#94a3b8' }} />
+                            {state?.isOn || roomHasRunningAutomation ? 'Ligado' : 'Desligado'}
                           </span>
-                          {state?.isOn && <span className="text-slate-300">·</span>}
-                          {state?.isOn && <span className="text-slate-400">{modeLabel[state.mode]}</span>}
+                          {(state?.isOn || roomHasRunningAutomation) && <span className="text-slate-300">·</span>}
+                          {(state?.isOn || roomHasRunningAutomation) && <span className="text-slate-400">{modeLabel[state?.mode ?? 'auto'] ?? 'Automático'}</span>}
                         </div>
                         <span className="text-slate-400">{room.acCount} AC{room.acCount !== 1 ? 's' : ''}</span>
                       </div>

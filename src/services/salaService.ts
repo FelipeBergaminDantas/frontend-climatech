@@ -91,13 +91,16 @@ export async function getRooms(clientId: string): Promise<Room[]> {
       }
     })
 
-    return salas.map((sala) => {
+    const rooms = salas.map((sala) => {
       const ctncNodeIds = ctncIdsBySala.get(sala.id) ?? []
       return mapSalaResponseToRoom(sala, {
         ctncNodeIds,
         acCount: Math.max(1, ctncNodeIds.length || sala.qtd_ac),
       })
     })
+
+    console.log('[salaService] Mapped rooms for client', clientId, { rooms })
+    return rooms
   })
 }
 

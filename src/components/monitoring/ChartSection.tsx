@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { TemperatureChart } from './TemperatureChart'
 import { getTemperatureHistory, getLiveReadings, getAvailableDates } from '@/services/deviceService'
 import { getClientName } from '@/services/clientService'
+import { useTemperatureHistory } from '@/hooks/useTemperatureTelemetry'
 import type { TemperatureReading, Room } from '@/types'
 
 interface ChartSectionProps {
@@ -26,10 +27,18 @@ export function ChartSection({
   allRooms = [],
   onRoomChange
 }: ChartSectionProps) {
-  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10))
-  const [readings, setReadings] = useState<TemperatureReading[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const now = new Date()
+    const offset = now.getTimezoneOffset()
+    return new Date(now.getTime() - offset * 60000).toISOString().slice(0, 10)
+  })
+  type TemperatureChartPoint = { timestamp: string; temp?: number; temperatura?: number }
+  const [readings, setReadings] = useState<TemperatureChartPoint[]>([])
   const [availableDates, setAvailableDates] = useState<string[]>([])
   const [resolvedDate, setResolvedDate] = useState<string>('')
+  
+  // Fetch temperature history using the hook
+  const { history, isLoading: historyLoading, error: historyError } = useTemperatureHistory(roomId, selectedDate)
   
   // Obter lista única de clientes
   const clientIds = Array.from(new Set(allRooms.map(r => r.clientId)))
@@ -56,21 +65,27 @@ export function ChartSection({
     setAvailableDates(dates)
   }, [roomId])
 
-  const loadHistory = useCallback((dateStr: string) => {
-    const date = new Date(dateStr + 'T00:00:00')
-    const data = getTemperatureHistory(roomId, date)
-    setReadings(data)
-    // Detect if we redirected to a different date
-    if (data.length > 0) {
-      const actual = data[0].timestamp.slice(0, 10)
-      setResolvedDate(actual !== dateStr ? actual : '')
-    }
-  }, [roomId])
-
-  // Load on date/room change
+  // Update readings when hook data changes
   useEffect(() => {
-    loadHistory(selectedDate)
-  }, [selectedDate, roomId, loadHistory])
+    if (history && history.length > 0) {
+      const normalizedReadings = history.map((point) => ({
+        timestamp: point.timestamp,
+        temp: typeof (point as any).temp === 'number'
+          ? (point as any).temp
+          : typeof point.temperatura === 'number'
+            ? point.temperatura
+            : Number((point as any).temp ?? point.temperatura),
+        temperatura: point.temperatura,
+      }))
+      setReadings(normalizedReadings)
+      // Detect if we redirected to a different date
+      const actual = history[0].timestamp.slice(0, 10)
+      setResolvedDate(actual !== selectedDate ? actual : '')
+    } else {
+      setReadings([])
+      setResolvedDate('')
+    }
+  }, [history, selectedDate])
 
   return (
     <div className="space-y-3">

@@ -1,5 +1,6 @@
 import type { DeviceState, DeviceMode, FanSpeed, TemperatureReading } from '@/types';
 import { validateTargetTemp } from '@/utils/validators';
+import { API_BASE_URL } from '@/services/apiService'
 
 // In-memory store — TODO: Replace with API calls to backend
 let deviceStates: DeviceState[] = [];
@@ -54,13 +55,18 @@ export async function sendCommand(
 }
 
 export function getTemperatureHistory(roomId: string, date?: Date): TemperatureReading[] {
-  // TODO: Fetch from API instead of mock data
+  // NOTE: This function fetches synchronously but returns an empty array
+  // Use useTemperatureHistory hook instead for async fetching
+  // Keeping this for backward compatibility
+  console.log('[deviceService] getTemperatureHistory called - use useTemperatureHistory hook instead')
   return [];
 }
 
 /** Returns available dates (as ISO date strings) for a room */
 export function getAvailableDates(roomId: string): string[] {
-  // TODO: Fetch from API instead of mock data
+  // NOTE: This is a placeholder
+  // In a real app, this would fetch from the backend
+  console.log('[deviceService] getAvailableDates called - returning empty for now')
   return [];
 }
 

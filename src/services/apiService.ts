@@ -524,21 +524,26 @@ export async function deleteClienteInBackend(id: string): Promise<boolean> {
  */
 export async function getSalasFromBackend(clientId: string): Promise<SalaResponse[]> {
   try {
-    const response = await fetch(`${API_BASE_URL}/salas/clientes/${clientId}`, {
+    const url = `${API_BASE_URL}/salas/clientes/${clientId}`
+    console.log('[apiService] GET salas by client:', { url, clientId })
+
+    const response = await fetch(url, {
       method: 'GET',
       headers: buildHeaders(false),
       credentials: 'include',
     })
 
+    console.log('[apiService] Response status for salas:', response.status, response.statusText)
     if (!response.ok) {
       const error = await response.json().catch(() => null)
       throw new Error(error?.message || 'Failed to load salas')
     }
 
     const result: ApiResponse<SalaResponse[]> = await response.json()
+    console.log('[apiService] Response data for salas:', result)
     return result.data
   } catch (error) {
-    console.error('Error fetching salas:', error)
+    console.error('[apiService] Error fetching salas:', error)
     return []
   }
 }
@@ -894,4 +899,129 @@ export async function deleteNodeInBackend(nodeId: string): Promise<boolean> {
 
   const result: ApiResponse<{ deleted: boolean }> = await response.json()
   return result.data.deleted
+}
+
+// ============================================================================
+// Temperature Telemetry
+// ============================================================================
+
+export interface TemperatureTelemetry {
+  id_node: string;
+  temperatura: number;
+  dth_medicao: string;
+  dth_created_at: string;
+  dth_updated_at: string;
+}
+
+export interface LastTemperatureByNode {
+  [nodeId: string]: TemperatureTelemetry | null;
+}
+
+/**
+ * Get last temperature measurement for a specific node
+ */
+export async function getLastTemperatureByNode(nodeId: string): Promise<TemperatureTelemetry | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/telemetry/nodes/${encodeURIComponent(nodeId)}/last`, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    if (response.status === 404) {
+      return null
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || 'Failed to fetch temperature')
+    }
+
+    const result: ApiResponse<TemperatureTelemetry> = await response.json()
+    return result.data
+  } catch (error) {
+    console.error('Error fetching last temperature:', error)
+    return null
+  }
+}
+
+/**
+ * Get last temperatures for multiple nodes
+ */
+export async function getLastTemperaturesByNodes(nodeIds: string[]): Promise<LastTemperatureByNode> {
+  if (nodeIds.length === 0) {
+    console.log('[apiService] getLastTemperaturesByNodes called with empty nodeIds')
+    return {}
+  }
+
+  try {
+    const params = new URLSearchParams()
+    nodeIds.forEach(nodeId => params.append('node_ids', nodeId))
+    const url = `${API_BASE_URL}/telemetry/nodes/last?${params}`
+
+    console.log('[apiService] GET last temperatures by nodes:', { url, nodeIds })
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    console.log('[apiService] Response status for telemetry:', response.status, response.statusText)
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || 'Failed to fetch temperatures')
+    }
+
+    const result: ApiResponse<LastTemperatureByNode> = await response.json()
+    console.log('[apiService] Response data for telemetry:', result)
+    return result.data || {}
+  } catch (error) {
+    console.error('[apiService] Error fetching last temperatures:', error)
+    return {}
+  }
+}
+
+export interface TemperatureHistoryPoint {
+  timestamp: string
+  temperatura: number
+}
+
+export interface TemperatureHistoryResponse {
+  data: TemperatureHistoryPoint[]
+  count: number
+  date: string
+}
+
+/**
+ * Get temperature history for a sala with 30-minute granularity
+ */
+export async function getTemperatureHistory(salaId: string, date?: string): Promise<TemperatureHistoryPoint[]> {
+  try {
+    let url = `${API_BASE_URL}/telemetry/salas/${encodeURIComponent(salaId)}/temperatura/historico`
+    
+    if (date) {
+      url += `?date=${encodeURIComponent(date)}`
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: buildHeaders(false),
+      credentials: 'include',
+    })
+
+    if (response.status === 404) {
+      return []
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => null)
+      throw new Error(error?.message || 'Failed to fetch temperature history')
+    }
+
+    const result: ApiResponse<TemperatureHistoryResponse> = await response.json()
+    return result.data?.data || []
+  } catch (error) {
+    console.error('Error fetching temperature history:', error)
+    return []
+  }
 }

@@ -4,10 +4,14 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ReferenceLine, ResponsiveContainer,
 } from 'recharts'
-import type { TemperatureReading } from '@/types'
+interface TemperatureChartReading {
+  timestamp: string
+  temp?: number
+  temperatura?: number
+}
 
 interface TemperatureChartProps {
-  readings: TemperatureReading[]
+  readings: TemperatureChartReading[]
   idealMin?: number
   idealMax?: number
   mode?: 'history'
@@ -28,12 +32,27 @@ export function TemperatureChart({ readings, idealMin, idealMax, mode = 'history
     return <p className="text-sm text-slate-400 py-8 text-center">Sem dados de temperatura.</p>
   }
 
-  const data = readings.map(r => ({
-    ts: new Date(r.timestamp).getTime(),
-    temp: r.temp,
-  }))
+  const data = readings
+    .map(r => {
+      const rawTemp = (r as any).temp ?? (r as any).temperatura
+      const temp = typeof rawTemp === 'number'
+        ? rawTemp
+        : typeof rawTemp === 'string'
+          ? Number(rawTemp)
+          : NaN
+      const timestamp = typeof r.timestamp === 'string' ? r.timestamp.replace(' ', 'T') : ''
+      return {
+        ts: new Date(timestamp).getTime(),
+        temp,
+      }
+    })
+    .filter((item) => Number.isFinite(item.ts) && Number.isFinite(item.temp))
 
-  const temps = readings.map(r => r.temp)
+  if (data.length === 0) {
+    return <p className="text-sm text-slate-400 py-8 text-center">Sem dados de temperatura.</p>
+  }
+
+  const temps = data.map((r) => r.temp)
   const minTemp = Math.floor(Math.min(...temps)) - 1
   const maxTemp = Math.ceil(Math.max(...temps)) + 1
 
