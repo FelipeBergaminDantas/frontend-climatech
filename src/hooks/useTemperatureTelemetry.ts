@@ -28,14 +28,15 @@ export function useTemperatureTelemetry(nodeId: string | null): UseTemperatureTe
     }
 
     let isMounted = true
+    const id = nodeId // Capture the non-null value
 
     async function fetchTemperature() {
       try {
         setIsLoading(true)
         setError(null)
-        console.log('[useTemperatureTelemetry] Fetching temperature for node:', nodeId)
+        console.log('[useTemperatureTelemetry] Fetching temperature for node:', id)
 
-        const data = await getLastTemperatureByNode(nodeId)
+        const data = await getLastTemperatureByNode(id)
         
         if (isMounted) {
           if (data) {
@@ -158,14 +159,15 @@ export function useTemperatureHistory(
     }
 
     let isMounted = true
+    const id = salaId // Capture the non-null value
 
     async function fetchHistory() {
       try {
         setIsLoading(true)
         setError(null)
-        console.log('[useTemperatureHistory] Fetching history for sala:', salaId, 'date:', date)
+        console.log('[useTemperatureHistory] Fetching history for sala:', id, 'date:', date)
 
-        const data = await getTemperatureHistory(salaId, date)
+        const data = await getTemperatureHistory(id, date)
         
         if (isMounted) {
           if (data && data.length > 0) {
