@@ -25,6 +25,7 @@ A plataforma é composta por dois tipos de nodes físicos e uma interface web ce
 | **TypeScript** | Tipagem estática em todo o projeto |
 | **Tailwind CSS v4** | Estilização utilitária responsiva |
 | **Recharts** | Gráficos de telemetria e consumo energético |
+| **Vitest** | Testes unitários e property-based |
 
 ---
 
@@ -36,6 +37,7 @@ A plataforma é composta por dois tipos de nodes físicos e uma interface web ce
 src/
 ├── app/                    # Rotas (Next.js App Router)
 │   ├── dashboard/          # Visão geral do sistema
+│   ├── clients/            # Visão consolidada de clientes (Admin Master)
 │   ├── select-client/      # Seleção de cliente (Admin Master)
 │   ├── rooms/              # Listagem e detalhes de salas
 │   │   ├── [id]/           # Detalhes de uma sala específica
@@ -46,7 +48,9 @@ src/
 │   ├── energy/             # Consumo energético
 │   ├── nodes/              # Gerenciamento de nodes (admin only)
 │   ├── users/              # Gerenciamento de usuários (admin only)
-│   ├── ai/                 # Assistente IA (modo demonstração)
+│   ├── ai/                 # Assistente IA integrado ao backend
+│   ├── admin/
+│   │   └── mqtt-terminal/  # Terminal MQTT para diagnóstico (admin only)
 │   ├── settings/           # Configurações de conta
 │   ├── login/              # Autenticação
 │   ├── register/           # Cadastro
@@ -55,13 +59,14 @@ src/
 ├── components/
 │   ├── auth/               # LoginForm, RegisterForm, TwoFactorForm
 │   ├── automation/         # RuleForm, RuleList
-│   ├── dashboard/          # EmptyState
+│   ├── clients/            # AddClientModal
+│   ├── dashboard/          # EmptyState, LiveModeNotification
 │   ├── monitoring/         # TemperatureChart, ChartSection, ConnectionAlert
 │   ├── rooms/              # DeviceControls, RoomForm, RoomList, DeleteRoomModal
-│   └── ui/                 # Button, Card, Input, Modal, Sidebar
+│   └── ui/                 # Button, Card, Input, Modal, Sidebar, PasswordConfirmModal
 │
 ├── contexts/
-│   ├── AuthContext.tsx      # Sessão do usuário (sessionStorage)
+│   ├── AuthContext.tsx      # Sessão do usuário (sessionStorage / localStorage)
 │   ├── ClientContext.tsx    # Gerenciamento de clientes
 │   ├── RoomsContext.tsx     # Estado global de salas e dispositivos (filtrado por cliente)
 │   ├── AutomationsContext.tsx # Estado global de automações (filtrado por cliente)
@@ -69,17 +74,24 @@ src/
 │   └── LoadingContext.tsx   # Estado de loading global
 │
 ├── services/
-│   ├── authService.ts       # Login, registro, 2FA, upload de avatar, CRUD de usuários
-│   ├── clientService.ts     # Gerenciamento de clientes
-│   ├── roomService.ts       # CRUD de salas (in-memory)
-│   ├── deviceService.ts     # Estado e comandos de dispositivos (in-memory)
-│   ├── automationService.ts # CRUD e avaliação de regras de automação
-│   ├── nodeService.ts       # Listagem e status de nodes CTN-R/CTN-C
-│   └── mockData.ts          # Dados iniciais para desenvolvimento
+│   ├── apiService.ts        # Integração central com a API FastAPI
+│   ├── authService.ts       # Login, logout, refresh de token
+│   ├── clientService.ts     # CRUD de clientes via API
+│   ├── salaService.ts       # CRUD de salas via API
+│   ├── acService.ts         # Gerenciamento de ar-condicionados via API
+│   ├── automationService.ts # CRUD e avaliação de regras de automação via API
+│   ├── nodeService.ts       # Listagem e status de nodes CTN-R/CTN-C via API
+│   ├── userService.ts       # CRUD de usuários via API
+│   ├── deviceService.ts     # Estado local de dispositivos e comandos de AC (parcial)
+│   ├── cacheService.ts      # Cache em memória de respostas da API (TTL 5 min)
+│   └── liveModeService.ts   # Coordenação do modo ao vivo entre usuários (em memória)
 │
 ├── hooks/
 │   ├── useAuth.ts           # Re-export de useAuth do AuthContext
-│   └── useTheme.ts          # Re-export de useTheme do ThemeContext
+│   ├── useTheme.ts          # Re-export de useTheme do ThemeContext
+│   ├── usePolling.ts        # Polling genérico para atualizações periódicas
+│   ├── useTemperatureTelemetry.ts # Telemetria de temperatura via API
+│   └── useClientStatus.ts   # Status de clientes ativos/inativos
 │
 ├── types/
 │   └── index.ts             # Todas as interfaces e tipos do sistema
@@ -88,8 +100,7 @@ src/
 │   └── validators.ts        # Validações de email, senha, temperatura, etc.
 │
 └── config/
-    ├── constants.ts         # Chaves de sessão, IDs padrão, tokens mock
-    └── adminCredentials.ts  # Credenciais dos Administradores Master (mock)
+    └── constants.ts         # Chaves de sessão e tokens
 ```
 
 ---
@@ -99,16 +110,16 @@ src/
 O estado da aplicação é gerenciado por contextos React, todos providos em `src/app/providers.tsx`:
 
 ### AuthContext
-Gerencia a sessão do usuário. Persiste os dados do usuário logado no `sessionStorage` (incluindo `role` e `selectedClientId` para Admin Master). Expõe `login`, `logout`, `register`, `verify2FA` e `updateUser`.
+Gerencia a sessão do usuário. Persiste os dados do usuário logado no `sessionStorage` ou `localStorage` (quando "lembrar-me" está ativo), incluindo `role` e `selectedClientId` para Admin Master. O token JWT é armazenado separadamente. Expõe `login`, `logout`, `register`, `verify2FA` e `updateUser`.
 
 ### ClientContext
 Gerencia a lista de clientes disponíveis e o cliente selecionado. Usado principalmente por Administradores Master para alternar entre clientes.
 
 ### RoomsContext
-Mantém o estado de todas as salas (`rooms`) e o estado atual de cada dispositivo (`deviceStates`). **Filtra automaticamente as salas por cliente** baseado no usuário logado. Expõe métodos para CRUD de salas, atualização de comandos via `sendCommand` e sincronização direta de estado via `syncDeviceState`.
+Mantém o estado de todas as salas (`rooms`) e o estado atual de cada dispositivo (`deviceStates`). **Filtra automaticamente as salas por cliente** baseado no usuário logado. Carrega dados via `salaService` (API). Expõe métodos para CRUD de salas, atualização de comandos via `sendCommand` e sincronização direta de estado via `syncDeviceState`.
 
 ### AutomationsContext
-Mantém o estado global de todas as regras de automação. **Filtra automaticamente por cliente** através das salas do RoomsContext. Expõe `toggleRule`, `createRule`, `updateRule`, `deleteRule` e `getRulesForRoom`.
+Mantém o estado global de todas as regras de automação. **Filtra automaticamente por cliente** através das salas do RoomsContext. Carrega e persiste dados via `automationService` (API). Expõe `toggleRule`, `createRule`, `updateRule`, `deleteRule` e `getRulesForRoom`.
 
 ---
 
@@ -123,10 +134,9 @@ O sistema possui três níveis de acesso com **isolamento total de dados por cli
   - Visualizar e gerenciar dados do cliente selecionado
   - Trocar de cliente a qualquer momento via sidebar
   - Criar usuários (incluindo outros Administradores Master)
-  - Acesso total a todas as funcionalidades (Nodes, Usuários, etc.)
+  - Acesso total a todas as funcionalidades (Nodes, Usuários, Terminal MQTT, etc.)
 - **Isolamento**: Vê apenas dados do cliente selecionado
 - **Visibilidade**: Invisível para Administradores Cliente
-
 
 ### 🔵 Administrador Cliente
 - **Acesso**: Apenas um cliente específico (vinculado permanentemente)
@@ -167,14 +177,14 @@ Todos os dados são filtrados por `clientId`:
 - Lista de todas as salas com status em tempo real
 
 ### 📊 Monitoramento
-- Gráficos de temperatura histórica por sala
+- Gráficos de temperatura histórica por sala (via API)
 - Seleção de data para visualização de histórico
 - Indicadores de status (Normal / Atenção / Crítico)
 - Alertas de conexão de dispositivos
 
 ### 🎛️ Controle de Dispositivos
 - Ligar/Desligar ar-condicionado
-- Ajuste de temperatura alvo
+- Ajuste de temperatura alvo (persistido via API)
 - Seleção de modo (Cool, Fan, Dry, Heat, Auto)
 - Controle de velocidade do ventilador
 - Feedback visual em tempo real
@@ -194,7 +204,7 @@ Todos os dados são filtrados por `clientId`:
 - Listagem de todos os nodes CTN-R e CTN-C
 - Status em tempo real (Online, Offline, Erro)
 - Filtros por status, tipo e sala
-- Comandos de diagnóstico e aprendizado IR
+- Comandos de diagnóstico e verificação de status
 - Informações de firmware e última conexão
 
 ### 👥 Gerenciamento de Usuários (Admin)
@@ -204,6 +214,11 @@ Todos os dados são filtrados por `clientId`:
 - Alteração de perfil (promover/rebaixar)
 - Exclusão de usuários
 
+### 📡 Terminal MQTT (Admin Master)
+- Monitoramento de mensagens MQTT em tempo real
+- Publicação manual de mensagens para testes
+- Visualização de status da conexão com o broker
+
 ---
 
 ## Lógica de Status de Temperatura
@@ -212,7 +227,7 @@ O status de cada sala (Normal / Atenção / Crítico) é calculado pela função
 
 | Status | Condição |
 |---|---|
-| **Normal** | `|currentTemp - targetTemp| ≤ 0.5°C` |
+| **Normal** | `\|currentTemp - targetTemp\| ≤ 0.5°C` |
 | **Atenção** | Diferença entre 0.5°C e 3°C |
 | **Crítico** | Diferença > 3°C |
 
@@ -231,46 +246,56 @@ Nodes de uma mesma sala compartilham o mesmo `pairId` (ex: `SALA-01`).
 
 ---
 
-## Dados
+## Integração com o Backend
 
-Todos os dados devem ser obtidos através da API backend. O frontend não contém mais dados mockados e depende inteiramente do servidor para:
+O frontend consome a API REST do backend ClimaTech (FastAPI). A URL base é configurável via variável de ambiente:
 
-### Clientes
-- Listagem de clientes via `/api/v1/clientes`
-- Seleção de cliente para contexto da sessão
+```env
+NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+```
 
-### Salas
-- Listagem de salas via `/api/v1/salas`
-- Criação, atualização e exclusão via API
+Se não definida, o padrão é `http://localhost:8000/api/v1`.
 
-### Usuários
-- Autenticação e login via `/api/v1/auth/login`
-- Gestão de usuários via endpoints de usuário
+### Endpoints principais
 
-### Nodes (CTN-R/CTN-C)
-- Listagem de nodes via `/api/v1/nodes`
-- Status em tempo real
+| Recurso | Endpoints |
+|---|---|
+| **Autenticação** | `POST /auth/login`, `POST /auth/logout`, `POST /auth/refresh` |
+| **Clientes** | `GET/POST /clientes`, `GET/PUT/DELETE /clientes/{id}`, ativar/desativar |
+| **Salas** | `GET/POST /salas`, `GET/PUT/DELETE /salas/{id}`, `GET /salas/{id}/acs` |
+| **Ar-condicionados** | `GET/PUT/DELETE /acs/{id}` |
+| **Usuários** | `GET/POST /users`, `PUT /users/{id}/role`, `DELETE /users/{id}` |
+| **Nodes** | `GET /nodes`, `GET/PUT/DELETE /nodes/{id}`, verificação de status |
+| **Automações** | `GET/POST /automacoes`, `PUT/DELETE /automacoes/{id}`, toggle, estados |
+| **Telemetria** | `GET /telemetry/last/{nodeId}`, histórico por sala |
+| **IA** | `POST /chat` |
+| **MQTT (admin)** | `GET /admin/mqtt/status`, `GET/POST /admin/mqtt/messages` |
 
-### Automações
-- Regras de automação via `/api/v1/automations`
+### Camada de serviços
 
-### Histórico de Temperatura
-- Dados históricos via `/api/v1/temperature-history`
-- Leitura ao vivo de temperaturas
-
-### Nodes
-Nodes CTN-R e CTN-C para cada sala, com status variados (online, offline, error).
-
-### Automações
-3 regras de automação de exemplo distribuídas entre as salas.
+- **`apiService.ts`**: funções de baixo nível que chamam a API e tratam erros
+- **`salaService.ts`**, **`clientService.ts`**, **`automationService.ts`**, etc.: camada de domínio com mapeamento de tipos e cache
+- **`cacheService.ts`**: evita chamadas duplicadas com TTL de 5 minutos
+- **`deviceService.ts`**: ainda mantém estado local para comandos de AC (ligar/desligar) — pendente integração completa com MQTT via backend
 
 ---
 
 ## Desenvolvimento
 
+### Pré-requisitos
+
+- Node.js 20+
+- Backend ClimaTech rodando em `http://localhost:8000` (veja `backend-climatech/README.md`)
+
+### Instalação e execução
+
 ```bash
 # Instalar dependências
 npm install
+
+# (Opcional) Configurar URL da API
+# Crie um arquivo .env.local com:
+# NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 
 # Executar em modo de desenvolvimento
 npm run dev
@@ -278,20 +303,34 @@ npm run dev
 # Build para produção
 npm run build
 
+# Executar build de produção
+npm start
+
+# Lint
+npm run lint
+
 # Executar testes
 npm run test
+
+# Testes em modo watch
+npm run test:watch
 ```
 
-Os dados são resetados ao recarregar a página, pois vivem apenas em memória.
+A aplicação estará disponível em `http://localhost:3000`.
 
 ---
 
 ## Próximos Passos
 
-- [ ] Integração com backend real (API REST ou GraphQL)
-- [ ] Implementação de WebSocket para atualizações em tempo real
-- [ ] Persistência de dados em banco de dados
-- [ ] Integração com broker MQTT para comunicação com nodes
+- [x] Integração com backend real (API REST)
+- [x] Autenticação JWT com refresh token
+- [x] CRUD de clientes, salas, usuários, nodes e automações via API
+- [x] Telemetria de temperatura via API
+- [x] Terminal MQTT para diagnóstico (admin)
+- [x] Assistente IA integrado ao backend
+- [ ] Comandos de AC (ligar/desligar, modo, ventilador) via backend/MQTT
+- [ ] WebSocket ou SSE para atualizações em tempo real (substituir polling)
+- [ ] Modo ao vivo coordenado via backend (atualmente em memória no frontend)
 - [ ] Sistema de notificações push
 - [ ] Relatórios e exportação de dados
 - [ ] Aplicativo mobile (React Native)
